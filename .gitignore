@@ -1,0 +1,40 @@
+# 虚拟环境
+agent-env/
+.venv/
+venv/
+env/
+
+# 环境变量与密钥
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 运行时数据
+my-agent/logs/*
+!my-agent/logs/.gitkeep
+my-agent/workspace/*
+!my-agent/workspace/.gitkeep
+*.log
+
+# IDE / 系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
