@@ -1,204 +1,127 @@
 """
-ReAct Agent 核心实现
-思路：Thought（思考）→ Action（行动）→ Observation（观察）→ 循环
+ReAct Agent 核心实现。
+
+主循环：
+  用户任务 → LLM 输出 → 解析结果 → 分支处理
+    ├─ final_answer：结束并返回给用户
+    ├─ action：调用工具，把 Observation 写回记忆，进入下一轮
+    └─ unknown：提示模型修正格式，进入下一轮
 """
 
-import re
-import json
+from __future__ import annotations
+
 from colorama import Fore, Style, init
 
 from src.core.llm_client import LLMClient
-from src.memory.persistentmemory import PersistentMemory
-from src.tools.calculator import CalculatorTool
-from src.tools.file_tool import FileTool
-from src.tools.web_tool import WebTool
-from src.tools.time import TimeTool
-from src.tools.weather import WeatherTool
+from src.core.prompts import SYSTEM_PROMPT
+from src.core.react_parser import (
+    TYPE_ACTION,
+    TYPE_FINAL_ANSWER,
+    parse_react_response,
+)
+from src.memory.conversation import ConversationMemory
+from src.memory.persistentmemory import PersistentMemory  # noqa: F401  # 切换持久化记忆时取消注释下方写法
+from src.tools import TOOLS
 
-# 初始化色彩输出
 init(autoreset=True)
 
-# 系统提示词
-SYSTEM_PROMPT = """你是一个智能任务助手，能够通过调用工具来完成用户交给你的任务。
-
-## 你拥有以下工具：
-
-{tool_descriptions}
-
-## 工作流程（严格遵守）：
-
-每次回复必须按照以下格式，直到任务完成：
-Thought: [分析当前情况，思考下一步该做什么]
-Action: [工具名称]
-Action Input: [工具的输入参数]
-
-当工具返回结果后，你会收到：
-Observation: [工具返回的结果]
-
-然后继续思考，直到任务完成，最后输出：
-Thought: [最终思考，确认任务已完成]
-Final Answer: [给用户的最终回答]
-
-## 重要规则：
-1. 每次只能调用一个工具
-2. 如果不需要工具，直接输出 Final Answer
-3. 遇到计算问题，必须使用 calculator 工具，不要自己心算
-4. Action 字段只能填写工具名称，不能有其他内容
-5. 如果工具返回错误，分析原因并尝试修正后重试
-"""
 
 class ReActAgent:
     """
-    基于 ReAct 范式的 AI Agent
-    
-    ReAct = Reasoning（推理）+ Acting（行动）
-    核心循环：Thought → Action → Observation → Thought → ...
+    基于 ReAct（Reasoning + Acting）的 Agent。
+
+    持有可变状态：tools 注册表、llm 客户端、对话记忆。
+    对外接口：run(task) / reset()。
     """
 
-    MAX_ITERATIONS = 5 # 最大迭代次数
+    MAX_ITERATIONS = 5
 
-    def __init__(self):
-        self.tools = {
-            "calculator": CalculatorTool(),
-            "file_tool": FileTool(),
-            "web_tool": WebTool(),
-            "get_time": TimeTool(),
-            "get_weather": WeatherTool(),
-        }
-        
-
-        # 构建工具描述（注入system prompt）
-        tool_descriptions = "\n".join(
-            f"- **{name}**：{tool.description}"
-            for name, tool in self.tools.items()
-        )
+    def __init__(self) -> None:
+        self.tools = TOOLS
         self.llm = LLMClient()
 
-        # 内存记忆写法，让 Agent 在重启后不能记住之前的对话
-        # self.memory = ConversationMemory(
-        #     max_turns=20,
-        #     system_prompt=SYSTEM_PROMPT.format(tool_descriptions=tool_descriptions),
-        # )
-
-        # 持久化记忆写法，让 Agent 在重启后还能记住之前的对话
-        self.memory = PersistentMemory(
-            save_path="./logs/memory.json",
-            max_turns=20,
-            system_prompt=SYSTEM_PROMPT.format(tool_descriptions=tool_descriptions),
+        tool_descriptions = "\n".join(
+            f"- **{name}**：{tool.DESCRIPTION}"
+            for name, tool in self.tools.items()
         )
-        
+        system_prompt = SYSTEM_PROMPT.format(tool_descriptions=tool_descriptions)
+
+        # 默认：进程内记忆（重启后丢失）
+        self.memory = ConversationMemory(max_turns=20, system_prompt=system_prompt)
+
+        # 若要持久化到磁盘，改用：
+        # self.memory = PersistentMemory(max_turns=20, system_prompt=system_prompt)
 
     def run(self, task: str) -> str:
         """
-        运行 Agent 处理任务
-        
-        Args:
-            task: 用户任务描述
-            
-        Returns:
-            Agent 最终回复
+        处理用户任务：多轮「调用 LLM → 解析 → 执行/结束」，直到给出最终答案
+        或达到 MAX_ITERATIONS。
         """
-
-        print(f"\n{Fore.CYAN}{'='*60}")
+        print(f"\n{Fore.CYAN}{'=' * 60}")
         print(f"🤖 任务开始：{task}")
-        print(f"{'='*60}{Style.RESET_ALL}\n")
+        print(f"{'=' * 60}{Style.RESET_ALL}\n")
 
         self.memory.add_message("user", task)
 
-        for i in range(1, self.MAX_ITERATIONS + 1):
-            print(f"{Fore.YELLOW}---第{i}轮思考---{Style.RESET_ALL}")
-
+        for round_idx in range(1, self.MAX_ITERATIONS + 1):
+            print(f"{Fore.YELLOW}---第{round_idx}轮思考---{Style.RESET_ALL}")
             print(f"{Fore.GREEN}LLM 输出：{Style.RESET_ALL}")
             response = self.llm.chat_stream(self.memory.get_messages())
             print()
 
-            # 解析LLM输出
-            parsed = self._parse_response(response)
+            parsed = parse_react_response(response)
+            result_type = parsed["type"]
 
-            # 情况一：任务完成，返回最终答案
-            if parsed["type"] == "final_answer":
-                self.memory.add_message("assistant", response)
-                final = parsed["content"]
-                print(f"\n{Fore.CYAN}{'='*60}")
-                print(f"✅ 任务完成！")
-                print(f"最终答案：{final}")
-                print(f"Token 消耗：{self.llm.get_token_usage()}")
-                print(f"{'='*60}{Style.RESET_ALL}\n")
-                return final
+            if result_type == TYPE_FINAL_ANSWER:
+                return self._finish_with_answer(response, parsed["content"])
 
-            # 情况二：需要调用工具
-            elif parsed["type"] == "action":
-                tool_name = parsed["tool"]
-                tool_input = parsed["input"]
+            if result_type == TYPE_ACTION:
+                self._run_tool_and_remember(response, parsed["tool"], parsed["input"])
+                continue
 
-                print(f"{Fore.MAGENTA}🔧 调用工具：{tool_name}")
-                print(f"   输入：{tool_input}{Style.RESET_ALL}")
+            self._ask_format_retry(response)
 
-                # 执行工具
-                observation = self._execute_tool(tool_name, tool_input)
-                print(f"{Fore.BLUE}📋 工具返回：{observation}{Style.RESET_ALL}\n")
-
-                # 将 LLM 输出和工具结果都加入记忆
-                self.memory.add_message("assistant", response)
-                self.memory.add_message(
-                    "user", f"Observation: {observation}"
-                )
-
-            # 情况三：解析失败，提示 LLM 修正格式
-            else:
-                print(f"{Fore.RED}⚠️  输出格式解析失败，提示 LLM 修正{Style.RESET_ALL}")
-                self.memory.add_message("assistant", response)
-                self.memory.add_message(
-                    "user",
-                    "你的输出格式不正确。请严格按照 Thought/Action/Action Input 或 Final Answer 格式回复。",
-                )
-        # 超出最大迭代次数
         return "任务未能在规定步骤内完成，请尝试简化任务描述。"
-    
-    def _parse_response(self, response: str) -> dict:
-        """
-        解析 LLM 的输出，提取 Action 或 Final Answer
-        
-        Returns:
-            {"type": "action", "tool": "...", "input": "..."}
-            {"type": "final_answer", "content": "..."}
-            {"type": "unknown"}
-        """
-        # 检查是否有 Final Answer
-        final_match = re.search(
-            r"Final Answer:\s*(.+?)(?:\n|$)", response, re.DOTALL
+
+    def reset(self) -> None:
+        """清空对话历史。"""
+        self.memory.clear()
+        print("Agent 状态已重置")
+
+    def _finish_with_answer(self, raw_response: str, answer: str) -> str:
+        """记录助手回复，打印完成信息，返回最终答案。"""
+        self.memory.add_message("assistant", raw_response)
+        print(f"\n{Fore.CYAN}{'=' * 60}")
+        print("✅ 任务完成！")
+        print(f"最终答案：{answer}")
+        print(f"Token 消耗：{self.llm.get_token_usage()}")
+        print(f"{'=' * 60}{Style.RESET_ALL}\n")
+        return answer
+
+    def _run_tool_and_remember(
+        self, raw_response: str, tool_name: str, tool_input: str
+    ) -> None:
+        """执行工具，并把 LLM 原文 + Observation 写入记忆。"""
+        print(f"{Fore.MAGENTA}🔧 调用工具：{tool_name}")
+        print(f"   输入：{tool_input}{Style.RESET_ALL}")
+
+        observation = self._execute_tool(tool_name, tool_input)
+        print(f"{Fore.BLUE}📋 工具返回：{observation}{Style.RESET_ALL}\n")
+
+        self.memory.add_message("assistant", raw_response)
+        self.memory.add_message("user", f"Observation: {observation}")
+
+    def _ask_format_retry(self, raw_response: str) -> None:
+        """解析失败：保存原文，追加格式纠正提示。"""
+        print(f"{Fore.RED}⚠️  输出格式解析失败，提示 LLM 修正{Style.RESET_ALL}")
+        self.memory.add_message("assistant", raw_response)
+        self.memory.add_message(
+            "user",
+            "你的输出格式不正确。请严格按照 Thought/Action/Action Input 或 Final Answer 格式回复。",
         )
-        if final_match:
-            return {"type": "final_answer", "content": final_match.group(1).strip()}
-
-        # 检查是否有 Action
-        action_match = re.search(r"Action:\s*(\w+)", response)
-        input_match = re.search(
-            r"Action Input:\s*(.+?)(?:\nThought|\nAction|\nObservation|$)",
-            response,
-            re.DOTALL,
-        )
-
-        if action_match and input_match:
-            return {
-                "type": "action",
-                "tool": action_match.group(1).strip(),
-                "input": input_match.group(1).strip(),
-            }
-
-        return {"type": "unknown"}
 
     def _execute_tool(self, tool_name: str, tool_input: str) -> str:
-        """
-        执行指定工具
-        
-        Args:
-            tool_name: 工具名称
-            tool_input: 工具输入
-            
-        Returns:
-            工具执行结果
-        """
+        """按名称调用已注册工具模块；未知工具或异常时返回错误字符串。"""
         if tool_name not in self.tools:
             available = ", ".join(self.tools.keys())
             return f"错误：工具 '{tool_name}' 不存在。可用工具：{available}"
@@ -207,9 +130,3 @@ class ReActAgent:
             return self.tools[tool_name].run(tool_input)
         except Exception as e:
             return f"工具执行异常：{str(e)}"
-
-    def reset(self):
-        """重置 Agent 状态（清空对话历史）"""
-        self.memory.clear()
-        print("Agent 状态已重置")
-
