@@ -2,7 +2,7 @@
 AI Agent 入口文件
 """
 
-from src.core.agent import ReActAgent
+from src.core import ReActAgent
 
 def main():
     agent = ReActAgent()
