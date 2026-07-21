@@ -12,25 +12,39 @@
 在仓库**根目录**操作：
 
 ```bash
-cd MartinAgent
-
+cd my-agent
+# 创建虚拟环境（强烈推荐，避免依赖冲突）
 python3 -m venv agent-env
-source agent-env/bin/activate          # Windows: agent-env\Scripts\activate
+source agent-env/bin/activate      # Linux/macOS
+agent-env\Scripts\activate         # Windows
 
-pip install -r requirements.txt
+# 安装核心依赖
+pip install -r ../requirements.txt
 
-cp my-agent/.env.example my-agent/.env
+# 验证安装
+python -c "import openai; print('OpenAI SDK 安装成功')"
+
 # 编辑 my-agent/.env，填入 API Key
+cp my-agent/.env.example my-agent/.env
+
+# 如果无法执行上面操作
+# 退出虚拟环境
+deactivate1
+# 删除损坏的虚拟环境目录
+rm -rf ~/project/MartinAgent/agent-env
+# 重复上面的操作
 ```
 
 ### 配置（`my-agent/.env`）
 
-| 变量 | 说明 |
-|------|------|
-| `OPENAI_API_KEY` | API 密钥 |
-| `OPENAI_BASE_URL` | Base URL（兼容 OpenAI 协议） |
-| `MODEL_NAME` | 模型名，如 `deepseek-chat`、`gpt-4o-mini` |
-| `DEFAULT_CITY` | 天气默认城市（可选） |
+
+| 变量                | 说明                                  |
+| ----------------- | ----------------------------------- |
+| `OPENAI_API_KEY`  | API 密钥                              |
+| `OPENAI_BASE_URL` | Base URL（兼容 OpenAI 协议）              |
+| `MODEL_NAME`      | 模型名，如 `deepseek-chat`、`gpt-4o-mini` |
+| `DEFAULT_CITY`    | 天气默认城市（可选）                          |
+
 
 最小示例（DeepSeek）：
 
@@ -44,6 +58,8 @@ MODEL_NAME=deepseek-chat
 
 ---
 
+
+
 ## 使用
 
 ```bash
@@ -53,16 +69,22 @@ python main.py
 
 启动后按轮输出思考过程（流式），最多约 5 轮工具调用。
 
-| 输入 | 说明 |
-|------|------|
-| 任务描述 | 开始执行 |
+
+| 输入      | 说明                                      |
+| ------- | --------------------------------------- |
+| 任务描述    | 开始执行                                    |
 | `reset` | 清空对话记忆（若启用持久化，会同步清空 `logs/memory.json`） |
-| `quit` | 退出 |
+| `quit`  | 退出                                      |
+
+
+
 
 ### 记忆
 
 - **默认**：进程内记忆（`ConversationMemory`），重启后丢失。
 - **可选持久化**：在 `src/core/agent.py` 中改用 `PersistentMemory`，历史写入 `my-agent/logs/memory.json`，重启后自动加载。
+
+
 
 ### 示例
 
@@ -76,17 +98,23 @@ python main.py
 
 ---
 
+
+
 ## 内置工具
 
-| 工具名 | 说明 |
-|--------|------|
-| `calculator` | 数学计算 |
-| `file_tool` | 在 `workspace/` 内读写文件 |
-| `web_tool` | 获取网页纯文本 |
-| `get_time` | 当前时间 |
-| `get_weather` | 查询天气 |
+
+| 工具名           | 说明                   |
+| ------------- | -------------------- |
+| `calculator`  | 数学计算                 |
+| `file_tool`   | 在 `workspace/` 内读写文件 |
+| `web_tool`    | 获取网页纯文本              |
+| `get_time`    | 当前时间                 |
+| `get_weather` | 查询天气                 |
+
 
 ---
+
+
 
 ## 项目结构
 
@@ -108,7 +136,10 @@ MartinAgent/
 
 ---
 
+
+
 ## 注意
 
 - 需要 Python 3.10+ 和可用的大模型 API Key
 - 依赖主要是：`openai`、`python-dotenv`、`requests`、`colorama`
+
