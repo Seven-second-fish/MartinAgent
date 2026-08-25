@@ -1,5 +1,7 @@
 # MartinAgent
 
+> **学习声明**：本项目仅用于学习与研究目的。请勿使用 AI 对本项目进行修改或自动改动。
+
 基于 **ReAct**（Thought → Action → Observation）的命令行 AI Agent。  
 支持 OpenAI 兼容 API（OpenAI / DeepSeek / 智谱等），可调用计算、文件、网页、时间、天气等工具完成任务。
 
@@ -14,12 +16,12 @@
 ```bash
 cd my-agent
 # 创建虚拟环境（强烈推荐，避免依赖冲突）
-python3 -m venv agent-env
-source agent-env/bin/activate      # Linux/macOS
-agent-env\Scripts\activate         # Windows
+python3 -m venv .venv
+source .venv/bin/activate      # Linux/macOS
+.venv\Scripts\activate         # Windows
 
 # 安装核心依赖
-pip install -r ../requirements.txt
+pip install -r requirements.txt
 
 # 验证安装
 python -c "import openai; print('OpenAI SDK 安装成功')"
@@ -29,9 +31,9 @@ cp my-agent/.env.example my-agent/.env
 
 # 如果无法执行上面操作
 # 退出虚拟环境
-deactivate1
+deactivate
 # 删除损坏的虚拟环境目录
-rm -rf ~/project/MartinAgent/agent-env
+rm -rf ~/project/MartinAgent/.venv
 # 重复上面的操作
 ```
 
@@ -110,6 +112,7 @@ python main.py
 | `web_tool`    | 获取网页纯文本              |
 | `get_time`    | 当前时间                 |
 | `get_weather` | 查询天气                 |
+| `roll_dice`   | 掷塞子                 |
 
 
 ---
