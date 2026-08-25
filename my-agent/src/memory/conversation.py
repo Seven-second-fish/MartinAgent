@@ -25,6 +25,7 @@ class ConversationMemory:
             role: 角色，'user' / 'assistant' / 'system'
             content: 消息内容
         """
+        # 模型一轮说完（assistant）之后，下一轮要继续想，必须再塞进一条「非 assistant」的消息，否则就像让助手自己跟自己说话，协议也不自然。
         self._history.append({"role": role, "content": content})
 
         # 超出最大轮数时，裁剪最早的记录（保留 system 消息）

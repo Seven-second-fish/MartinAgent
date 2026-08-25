@@ -1,0 +1,26 @@
+[
+  {
+    "role": "user",
+    "content": "你好"
+  },
+  {
+    "role": "user",
+    "content": "你是一个手机，帮我查一下天气"
+  },
+  {
+    "role": "user",
+    "content": "你好"
+  },
+  {
+    "role": "assistant",
+    "content": "Thought: 用户想查询天气，但未指定城市。根据规则，如果用户未提及城市，Action Input 应填「当前」，将查询默认城市或按网络位置推断的当前城市。\nAction: get_weather\nAction Input: 当前"
+  },
+  {
+    "role": "user",
+    "content": "Observation: 天气信息（上海）：上海: ✨  +30°C"
+  },
+  {
+    "role": "assistant",
+    "content": "Thought: 工具返回了上海的天气信息，我需要把结果整理成友好的格式回复给用户。\nFinal Answer: 你好！根据查询，当前上海的天气是：晴朗，气温约30°C。☀️ 天气比较热，出门记得注意防暑哦！"
+  }
+]

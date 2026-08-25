@@ -34,12 +34,13 @@ class ReActAgent:
     对外接口：run(task) / reset()。
     """
 
-    MAX_ITERATIONS = 5
+    MAX_ITERATIONS = 8
 
     def __init__(self) -> None:
         self.tools = TOOLS
         self.llm = LLMClient()
 
+        # 将tools目录下.py的DESCRIPTION组合到system prompt中，让模型知道有这个工具，怎么用
         tool_descriptions = "\n".join(
             f"- **{name}**：{tool.DESCRIPTION}"
             for name, tool in self.tools.items()
@@ -69,19 +70,34 @@ class ReActAgent:
             response = self.llm.chat_stream(self.memory.get_messages())
             print()
 
+            # LLM 偶尔返回空内容（上下文过长或偶发异常），单独提示重试，避免浪费本轮
+            if not response.strip():
+                print(f"{Fore.RED}⚠️  LLM 返回空内容，要求其重新输出{Style.RESET_ALL}")
+                self.memory.add_message(
+                    "user",
+                    "你刚才没有输出任何内容。请重新思考，"
+                    "并严格按照 Thought/Action/Action Input 或 Final Answer 格式输出。",
+                )
+                continue
+
             parsed = parse_react_response(response)
             result_type = parsed["type"]
 
+            # 分支1，如果type类型是最终答案，则直接返回最终答案并记忆
             if result_type == TYPE_FINAL_ANSWER:
                 return self._finish_with_answer(response, parsed["content"])
 
+            # 分支2，如果type类型是动作，则执行调用工具的操作并将结果记入记忆
             if result_type == TYPE_ACTION:
                 self._run_tool_and_remember(response, parsed["tool"], parsed["input"])
                 continue
 
+            # 分支3，如果type类型是未知，则提示模型修正格式
             self._ask_format_retry(response)
 
-        return "任务未能在规定步骤内完成，请尝试简化任务描述。"
+        fallback = "任务未能在规定步骤内完成，请尝试简化任务描述。"
+        print(f"\n{Fore.RED}⚠️  {fallback}{Style.RESET_ALL}\n")
+        return fallback
 
     def reset(self) -> None:
         """清空对话历史。"""
@@ -108,6 +124,8 @@ class ReActAgent:
         observation = self._execute_tool(tool_name, tool_input)
         print(f"{Fore.BLUE}📋 工具返回：{observation}{Style.RESET_ALL}\n")
 
+        # 对话习惯是user → assistant → user → assistant → …
+        # 模型一轮说完（assistant）之后，下一轮要继续想，必须再塞进一条「非 assistant」的消息，否则就像让助手自己跟自己说话，协议也不自然。
         self.memory.add_message("assistant", raw_response)
         self.memory.add_message("user", f"Observation: {observation}")
 
@@ -127,6 +145,7 @@ class ReActAgent:
             return f"错误：工具 '{tool_name}' 不存在。可用工具：{available}"
 
         try:
+            # 调用工具模块的run方法，并传入tool_input参数
             return self.tools[tool_name].run(tool_input)
         except Exception as e:
             return f"工具执行异常：{str(e)}"
