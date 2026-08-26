@@ -72,9 +72,11 @@ def _format_results(data: dict) -> str:
     lines = []
     for i, page in enumerate(pages[:MAX_RESULTS], start=1):
         title = _clean(page.get("name") or page.get("title") or "")
-        url = (page.get("url") or "").strip()
+        # url 为实际链接；displayUrl 是 url decode 后的展示形式，仅在 url 缺失时兜底
+        url = (page.get("url") or page.get("displayUrl") or "").strip()
         summary = _clean(page.get("summary") or page.get("snippet") or "")
         site = _clean(page.get("siteName") or "")
+        # 官方建议用 datePublished（UTC+8）。dateLastCrawled 名义是 UTC、实为 +8 的兼容坑，勿用
         date = (page.get("datePublished") or "")[:10]  # 只保留 YYYY-MM-DD
         meta = " | ".join(part for part in (site, date) if part)
         head = f"[{i}] {title}\n{url}"
