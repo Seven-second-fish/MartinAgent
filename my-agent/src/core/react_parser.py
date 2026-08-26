@@ -64,8 +64,9 @@ def _normalize_markdown_labels(text: str) -> str:
 
 def _extract_action(text: str) -> dict | None:
     """提取工具调用；要求同时存在行首的 Action 与 Action Input。"""
+    # 工具名允许被方括号包裹：模型常把提示词里的「Action: [工具名称]」原样照抄
     action_match = re.search(
-        r"(?im)^\s*Action\s*[:：]\s*([A-Za-z_][\w]*)\s*$",
+        r"(?im)^\s*Action\s*[:：]\s*\[?\s*([A-Za-z_][\w]*)\s*\]?\s*$",
         text,
     )
     input_match = re.search(
@@ -77,7 +78,8 @@ def _extract_action(text: str) -> dict | None:
     if not action_match or not input_match:
         return None
 
-    tool_input = input_match.group(1).strip()
+    # 去掉参数两端的引号/方括号（如 ['2/3/4/5/6'] → 2/3/4/5/6）
+    tool_input = input_match.group(1).strip().strip("\"'[]")
     if not tool_input:
         return None
 

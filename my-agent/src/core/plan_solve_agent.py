@@ -17,6 +17,8 @@ from datetime import datetime
 
 from src.core.llm_client import LLMClient
 from src.core.prompts import EXECUTOR_PROMPT_TEMPLATE, PLANNER_PROMPT_TEMPLATE
+from src.tools import TOOLS
+from src.core.react_parser import TYPE_ACTION, parse_react_response
 
 
 def _extract_plan_text(text: str) -> str:
@@ -63,6 +65,10 @@ class Planner:
         prompt = PLANNER_PROMPT_TEMPLATE.format(
             current_date=datetime.now().strftime("%Y-%m-%d"),
             question=question,
+            tool_descriptions="\n".join(
+                f"- **{name}**：{tool.DESCRIPTION}"
+                for name, tool in TOOLS.items()
+            ),
         )
         # 规划阶段是一次性提问，没有多轮对话，直接构造消息即可
         messages = [{"role": "system", "content": prompt}]
@@ -83,6 +89,7 @@ class Executor:
 
     def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
+        self.tools = TOOLS
 
     def execute(self, question: str, plan: list[str]) -> str:
         """按计划逐步执行；返回最后一步的答案。"""
@@ -90,6 +97,10 @@ class Executor:
 
         print("\n--- 正在执行计划 ---")
         response_text = ""
+        tool_descriptions = "\n".join(
+            f"- **{name}**：{tool.DESCRIPTION}"
+            for name, tool in self.tools.items()
+        )
         for i, step in enumerate(plan, start=1):
             print(f"\n-> 正在执行步骤 {i}/{len(plan)}: {step}")
 
@@ -98,16 +109,38 @@ class Executor:
                 plan="\n".join(f"{idx}. {s}" for idx, s in enumerate(plan, start=1)),
                 history=history or "无",
                 current_step=step,
+                tool_descriptions=tool_descriptions,
             )
             messages = [{"role": "system", "content": prompt}]
 
             response_text = self.llm_client.chat_stream(messages) or "（无输出）"
+
+            # Plan-and-Solve 里每一步都是一次求解，只有一种特例：
+            # 模型需要工具时输出 Action，工具返回的 Observation 即作为该步结果
+            parsed = parse_react_response(response_text)
+            if parsed["type"] == TYPE_ACTION:
+                print(f"🔧 调用工具：{parsed['tool']}，输入：{parsed['input']}")
+                observation = self._execute_tool(parsed["tool"], parsed["input"])
+                print(f"📋 工具返回：{observation}\n")
+                response_text = f"Observation: {observation}"
+
             history += f"步骤 {i}: {step}\n结果: {response_text}\n\n"
 
             print(f"✅ 步骤 {i} 已完成")
 
         # 最后一步的答案即最终答案
         return response_text
+
+    def _execute_tool(self, tool_name: str, tool_input: str) -> str:
+        """按名称调用已注册工具模块；未知工具或异常时返回错误字符串。"""
+        if tool_name not in self.tools:
+            available = ", ".join(self.tools.keys())
+            return f"错误：工具 '{tool_name}' 不存在。可用工具：{available}"
+
+        try:
+            return self.tools[tool_name].run(tool_input)
+        except Exception as e:
+            return f"工具执行异常：{str(e)}"
 
 
 class PlanAndSolveAgent:
@@ -137,7 +170,6 @@ class PlanAndSolveAgent:
         对外接口（与 ReActAgent 一致）。
 
         Plan-and-Solve 每次 run 相互独立（规划/执行都在单次 run 内完成），
-        目前没有跨 run 的状态，无需清理。等执行阶段接入工具调用后，
-        如果要在 run 之间保留上下文，再在这里清空相应状态。
+        工具调用结果只记在单次 run 的局部 history 里，没有跨 run 状态，无需清理。
         """
         print("Agent 状态已重置")
