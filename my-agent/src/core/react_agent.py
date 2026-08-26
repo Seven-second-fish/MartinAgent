@@ -10,6 +10,8 @@ ReAct Agent 核心实现。
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from colorama import Fore, Style, init
 
 from src.core.llm_client import LLMClient
@@ -38,14 +40,17 @@ class ReActAgent:
 
     def __init__(self) -> None:
         self.tools = TOOLS
-        self.llm = LLMClient()
+        self.llm_client = LLMClient()
 
         # 将tools目录下.py的DESCRIPTION组合到system prompt中，让模型知道有这个工具，怎么用
         tool_descriptions = "\n".join(
             f"- **{name}**：{tool.DESCRIPTION}"
             for name, tool in self.tools.items()
         )
-        system_prompt = SYSTEM_PROMPT.format(tool_descriptions=tool_descriptions)
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        system_prompt = SYSTEM_PROMPT.format(
+            tool_descriptions=tool_descriptions, current_date=current_date
+        )
 
         # 默认：进程内记忆（重启后丢失）
         self.memory = ConversationMemory(max_turns=20, system_prompt=system_prompt)
@@ -67,7 +72,7 @@ class ReActAgent:
         for round_idx in range(1, self.MAX_ITERATIONS + 1):
             print(f"{Fore.YELLOW}---第{round_idx}轮思考---{Style.RESET_ALL}")
             print(f"{Fore.GREEN}LLM 输出：{Style.RESET_ALL}")
-            response = self.llm.chat_stream(self.memory.get_messages())
+            response = self.llm_client.chat_stream(self.memory.get_messages())
             print()
 
             # LLM 偶尔返回空内容（上下文过长或偶发异常），单独提示重试，避免浪费本轮
@@ -110,7 +115,7 @@ class ReActAgent:
         print(f"\n{Fore.CYAN}{'=' * 60}")
         print("✅ 任务完成！")
         print(f"最终答案：{answer}")
-        print(f"Token 消耗：{self.llm.get_token_usage()}")
+        print(f"Token 消耗：{self.llm_client.get_token_usage()}")
         print(f"{'=' * 60}{Style.RESET_ALL}\n")
         return answer
 
