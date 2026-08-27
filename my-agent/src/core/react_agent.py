@@ -2,28 +2,26 @@
 ReAct Agent 核心实现。
 
 主循环：
-  用户任务 → LLM 输出 → 解析结果 → 分支处理
-    ├─ final_answer：结束并返回给用户
-    ├─ action：调用工具，把 Observation 写回记忆，进入下一轮
-    └─ unknown：提示模型修正格式，进入下一轮
+  用户任务 → LLM 输出（原生函数调用）→ 分支处理
+    ├─ tool_calls：执行工具，把结果以 tool 消息写回记忆，进入下一轮
+    ├─ 空内容：提示模型重新输出，进入下一轮
+    └─ 文本回复：作为最终答案返回
+
+工具调用走 API 原生函数调用（tools 字段），不再解析纯文本 Action 格式。
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from colorama import Fore, Style, init
 
-from src.core.llm_client import LLMClient
+from src.core.llm_client import ChatResult, LLMClient
 from src.core.prompts import SYSTEM_PROMPT
-from src.core.react_parser import (
-    TYPE_ACTION,
-    TYPE_FINAL_ANSWER,
-    parse_react_response,
-)
 from src.memory.conversation import ConversationMemory
 from src.memory.persistentmemory import PersistentMemory  # noqa: F401  # 切换持久化记忆时取消注释下方写法
-from src.tools import TOOLS
+from src.tools import TOOLS, build_tool_schemas, call_tool
 
 init(autoreset=True)
 
@@ -60,7 +58,7 @@ class ReActAgent:
 
     def run(self, task: str) -> str:
         """
-        处理用户任务：多轮「调用 LLM → 解析 → 执行/结束」，直到给出最终答案
+        处理用户任务：多轮「调用 LLM → 执行工具/结束」，直到给出最终答案
         或达到 MAX_ITERATIONS。
         """
         print(f"\n{Fore.CYAN}{'=' * 60}")
@@ -71,34 +69,29 @@ class ReActAgent:
 
         for round_idx in range(1, self.MAX_ITERATIONS + 1):
             print(f"{Fore.YELLOW}---第{round_idx}轮思考---{Style.RESET_ALL}")
-            print(f"{Fore.GREEN}LLM 输出：{Style.RESET_ALL}")
-            response = self.llm_client.chat_stream(self.memory.get_messages())
+
+            result = self.llm_client.chat_stream(
+                self.memory.get_messages(), tools=build_tool_schemas()
+            )
             print()
 
-            # LLM 偶尔返回空内容（上下文过长或偶发异常），单独提示重试，避免浪费本轮
-            if not response.strip():
+            # 分支1：模型发起工具调用 → 执行并写回记忆，继续下一轮
+            if result.tool_calls:
+                self._run_tools_and_remember(result)
+                continue
+
+            # 分支2：LLM 偶尔返回空内容（上下文过长或偶发异常），单独提示重试
+            if not result.content.strip():
                 print(f"{Fore.RED}⚠️  LLM 返回空内容，要求其重新输出{Style.RESET_ALL}")
                 self.memory.add_message(
                     "user",
-                    "你刚才没有输出任何内容。请重新思考，"
-                    "并严格按照 Thought/Action/Action Input 或 Final Answer 格式输出。",
+                    "你刚才没有输出任何内容。请重新思考并输出回答，"
+                    "如果任务需要，也可以发起工具调用。",
                 )
                 continue
 
-            parsed = parse_react_response(response)
-            result_type = parsed["type"]
-
-            # 分支1，如果type类型是最终答案，则直接返回最终答案并记忆
-            if result_type == TYPE_FINAL_ANSWER:
-                return self._finish_with_answer(response, parsed["content"])
-
-            # 分支2，如果type类型是动作，则执行调用工具的操作并将结果记入记忆
-            if result_type == TYPE_ACTION:
-                self._run_tool_and_remember(response, parsed["tool"], parsed["input"])
-                continue
-
-            # 分支3，如果type类型是未知，则提示模型修正格式
-            self._ask_format_retry(response)
+            # 分支3：文本回复即最终答案
+            return self._finish_with_answer(result)
 
         fallback = "任务未能在规定步骤内完成，请尝试简化任务描述。"
         print(f"\n{Fore.RED}⚠️  {fallback}{Style.RESET_ALL}\n")
@@ -109,48 +102,44 @@ class ReActAgent:
         self.memory.clear()
         print("Agent 状态已重置")
 
-    def _finish_with_answer(self, raw_response: str, answer: str) -> str:
-        """记录助手回复，打印完成信息，返回最终答案。"""
-        self.memory.add_message("assistant", raw_response)
+    def _finish_with_answer(self, result: ChatResult) -> str:
+        """打印完成信息，返回最终答案。"""
+        self.memory.add_message("assistant", result.content)
         print(f"\n{Fore.CYAN}{'=' * 60}")
         print("✅ 任务完成！")
-        print(f"最终答案：{answer}")
+        print(f"最终答案：{result.content}")
         print(f"Token 消耗：{self.llm_client.get_token_usage()}")
         print(f"{'=' * 60}{Style.RESET_ALL}\n")
-        return answer
+        return result.content
 
-    def _run_tool_and_remember(
-        self, raw_response: str, tool_name: str, tool_input: str
-    ) -> None:
-        """执行工具，并把 LLM 原文 + Observation 写入记忆。"""
-        print(f"{Fore.MAGENTA}🔧 调用工具：{tool_name}")
-        print(f"   输入：{tool_input}{Style.RESET_ALL}")
+    def _run_tools_and_remember(self, result: ChatResult) -> None:
+        """
+        执行模型发起的所有工具调用，并把 assistant 原文 + 各工具结果写回记忆。
 
-        observation = self._execute_tool(tool_name, tool_input)
-        print(f"{Fore.BLUE}📋 工具返回：{observation}{Style.RESET_ALL}\n")
-
-        # 对话习惯是user → assistant → user → assistant → …
-        # 模型一轮说完（assistant）之后，下一轮要继续想，必须再塞进一条「非 assistant」的消息，否则就像让助手自己跟自己说话，协议也不自然。
-        self.memory.add_message("assistant", raw_response)
-        self.memory.add_message("user", f"Observation: {observation}")
-
-    def _ask_format_retry(self, raw_response: str) -> None:
-        """解析失败：保存原文，追加格式纠正提示。"""
-        print(f"{Fore.RED}⚠️  输出格式解析失败，提示 LLM 修正{Style.RESET_ALL}")
-        self.memory.add_message("assistant", raw_response)
+        协议要求：assistant 消息必须带原始 tool_calls（arguments 为 JSON 字符串），
+        每个工具调用后跟一条 role="tool" 且 tool_call_id 匹配的消息。
+        """
         self.memory.add_message(
-            "user",
-            "你的输出格式不正确。请严格按照 Thought/Action/Action Input 或 Final Answer 格式回复。",
+            "assistant",
+            result.content or "",
+            tool_calls=[
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                    },
+                }
+                for tc in result.tool_calls
+            ],
         )
 
-    def _execute_tool(self, tool_name: str, tool_input: str) -> str:
-        """按名称调用已注册工具模块；未知工具或异常时返回错误字符串。"""
-        if tool_name not in self.tools:
-            available = ", ".join(self.tools.keys())
-            return f"错误：工具 '{tool_name}' 不存在。可用工具：{available}"
+        for tc in result.tool_calls:
+            print(f"{Fore.MAGENTA}🔧 调用工具：{tc.name}")
+            print(f"   参数：{tc.arguments}{Style.RESET_ALL}")
 
-        try:
-            # 调用工具模块的run方法，并传入tool_input参数
-            return self.tools[tool_name].run(tool_input)
-        except Exception as e:
-            return f"工具执行异常：{str(e)}"
+            observation = call_tool(tc.name, tc.arguments)
+            print(f"{Fore.BLUE}📋 工具返回：{observation}{Style.RESET_ALL}\n")
+
+            self.memory.add_message("tool", observation, tool_call_id=tc.id)

@@ -10,11 +10,11 @@
 
 当前仓库**已经具备**的能力（对照用，不必重做）：
 
-- 终端入口 + ReAct 循环（Thought / Action / Observation / Final Answer）
+- 终端入口 + 三种 agent（ReAct / Plan-and-Solve / Reflection）
 - OpenAI 兼容 LLM 调用（含流式）
 - 工具：计算、文件沙箱、网页、时间、天气
 - 对话记忆（内存 / 可选持久化）
-- 输出解析（`react_parser`）
+- 原生函数调用（`tools` 字段）统一承载工具调用与结构化输出（无正则解析层）
 
 建议顺序：**能跑通 → 读懂 → 小改 → 新功能 → 加深 Agent 能力**。  
 每一阶段结束时，用自己的话写 3～5 行笔记：「这个功能解决什么问题」。
@@ -50,7 +50,7 @@
 | 字典、列表 | `agent` 里 `tools`、记忆里的 messages | `python dict list` |
 | 类：何时有状态 | `ReActAgent`、`LLMClient`、Memory | `python class self`；对比工具为何不用类 |
 | 读写文件、异常 | `file_tool`、`persistentmemory` | `python open encoding`、`try except` |
-| 正则简单用法 | `react_parser.py` | `python re.search`；先看懂，不急着写复杂正则 |
+| 正则简单用法 | `reflection_agent._strip_code_fences`（仅剩的用法：剥代码围栏） | `python re.search`；先看懂，不急着写复杂正则 |
 | HTTP 请求 | `web_tool`、`weather` | `python requests get` |
 | 环境变量 | `llm_client`、天气默认城市 | `os.getenv`、`python-dotenv` |
 
@@ -64,11 +64,11 @@
 
 | 要做的功能 / 改动 | 小提示 |
 |-------------------|--------|
-| 画一张自己的流程图：用户输入 → LLM → 解析 → 工具 → 记忆 → 下一轮 | 对照 `agent.py` + `react_parser.py` |
+| 画一张自己的流程图：用户输入 → LLM → 工具调用 → 记忆 → 下一轮 | 对照 `react_agent.py` |
 | 把 `MAX_ITERATIONS` 改成可配置（如读环境变量） | 搜：`python 读环境变量 int` |
 | 给解析失败时的提示文案改成你自己的版本 | 只改字符串，观察模型是否更容易纠正 |
 | 强制走工具：故意问计算题，确认它不会心算 | 对照 system prompt 里的规则 |
-| （可选）临时关掉闲聊兜底，看「你好」会怎样 | 在 `react_parser` 里找「纯自然语言」分支 |
+| 观察模型空回复时 agent 如何提示重试 | `react_agent.py` 分支 2 |
 
 **过关**：能解释 `action` / `final_answer` / `unknown` 三种结果各自通向哪段代码。
 
@@ -117,7 +117,7 @@
 | 统计解析失败次数，打印简单计数 | 变量累加即可 |
 | 支持模型用中文标签（如「最终答案：」） | 在 parser 里加一种别名匹配 |
 | 非法工具名时，把可用工具列表写进 Observation | Agent 里已有类似逻辑，可加强 |
-| （进阶）用 JSON 模式输出 Action（若模型支持） | 搜：`json mode` / `tool calls`；可与 ReAct 文本协议对比 |
+| ~~（进阶）用 JSON 模式输出 Action~~ | ✅ 已完成：Planner / Reflection 改用 `submit_plan` / `submit_review` 函数调用提交参数表 |
 | （进阶）加 2～3 个解析单测 | 搜：`pytest 入门`；输入样本文本 → 断言 type |
 
 **过关**：准备 5 段「故意歪」的模型输出，你的 parser 行为符合预期。
@@ -147,7 +147,7 @@
 | 方向 | 要做的功能 | 小提示 |
 |------|------------|--------|
 | 多步规划 | 先让模型输出计划列表，再逐步执行 | 搜：`plan and execute agent` |
-| 官方 Tool Calling | 不用纯文本 ReAct，改用 API 的 tools 字段 | 搜：`openai function calling` / `tool calls` |
+| ~~官方 Tool Calling~~ | ✅ 已完成：三个 agent 全部走 API `tools` 字段；`llm_client.chat_stream` 组装流式 tool_calls | 搜：`openai function calling` / `tool calls` |
 | 检索增强（RAG 迷你版） | 把 `workspace` 文档切块检索后再回答 | 搜：`简易 RAG python`；先别上向量库也行 |
 | 人机确认 | 危险操作（删文件、外网 POST）先 `input` 确认 | 搜：`human in the loop agent` |
 | 简单 Web UI | 用 Streamlit/Gradio 包一层对话框 | 搜：`streamlit chat` |
@@ -198,4 +198,4 @@ Linux 命令不熟时：先 `pwd` / `ls` / `cd` 定位，再搜具体命令；�
 | `AGENT.md` | 改代码时的约定（类 vs 模块、怎么加工具） |
 | 本文 `LEARNING_PLAN.md` | 你学 Agent 时「下一步做什么功能」 |
 
-读代码顺序建议：`main.py` → `agent.py` → `react_parser.py` → `llm_client.py` → 某一个 `tools/*.py` → `memory/*`。
+读代码顺序建议：`main.py` → `react_agent.py` → `llm_client.py`（重点看流式 tool_calls 组装）→ 某一个 `tools/*.py` → `memory/*`。

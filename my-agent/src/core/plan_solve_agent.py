@@ -2,8 +2,9 @@
 Plan-and-Solve Agent 实现。
 
 流程：
-  1. Planner 规划：把用户问题拆成一个有序步骤列表（Python 列表字面量）
-  2. Executor 执行：按步骤逐个让 LLM 求解，把已完成步骤和结果当作历史传给下一步
+  1. Planner 规划：把用户问题拆成一个有序步骤列表（调用 submit_plan 工具提交 steps）
+  2. Executor 执行：按步骤逐个让 LLM 求解，把已完成步骤和结果当作历史传给下一步；
+     单步内可多轮调用工具（原生函数调用），工具结果自动返回
   3. PlanAndSolveAgent 组装：先规划、后执行，返回最终答案
 
 对外接口与 ReActAgent 一致：run(task) / reset()。
@@ -11,44 +12,60 @@ Plan-and-Solve Agent 实现。
 
 from __future__ import annotations
 
-import ast
+import json
 import re
-from datetime import datetime
 
 from src.core.llm_client import LLMClient
 from src.core.prompts import EXECUTOR_PROMPT_TEMPLATE, PLANNER_PROMPT_TEMPLATE
-from src.tools import TOOLS
-from src.core.react_parser import TYPE_ACTION, parse_react_response
+from src.tools import TOOLS, build_tool_schemas, call_tool
+
+# 「提交计划」工具：把「输出 JSON 计划」改成原生函数调用，
+# 让模型填参数表（steps 数组）而不是自由写 JSON，从源头避免字段瞎编/解析错误。
+_SUBMIT_PLAN_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_plan",
+            "description": "提交分解好的行动计划步骤列表",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "按逻辑顺序排列的子任务步骤",
+                    }
+                },
+                "required": ["steps"],
+            },
+        },
+    }
+]
 
 
-def _extract_plan_text(text: str) -> str:
+def _extract_plan(result) -> list[str]:
     """
-    从 LLM 输出中提取列表字面量文本，按优先级：
-      1. 代码围栏内容（```python ... ```）
-      2. 中括号片段（模型没写围栏，但把列表夹在说明文字中间时）
-      3. 全文（本来就是纯列表）
+    从 submit_plan 工具调用中取步骤列表。
+
+    优先读工具调用参数（模型填好的参数表）；模型偶尔不调工具、直接在正文写 JSON，
+    此时退化为解析正文兜底。仍失败返回空列表。
     """
-    match = re.search(r"```(?:python)?\s*(.*?)```", text, re.IGNORECASE | re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    match = re.search(r"\[.*?\]", text, re.DOTALL)
-    if match:
-        return match.group(0).strip()
-    return text.strip()
+    for tc in result.tool_calls:
+        if tc.name == "submit_plan":
+            steps = tc.arguments.get("steps")
+            if isinstance(steps, list):
+                return [str(s) for s in steps]
 
-
-def _parse_plan(response_text: str) -> list[str]:
-    """把 LLM 输出解析成步骤列表；解析失败返回空列表。"""
-    text = _extract_plan_text(response_text)
-    # 第一次直接解析；失败时去掉字符串内的真实换行再试一次
-    # （模型偶尔会把步骤写成多行字符串，真实换行在字符串字面量里不合法）
-    for candidate in (text, text.replace("\n", "")):
-        try:
-            plan = ast.literal_eval(candidate)
-            if isinstance(plan, list):
-                return plan
-        except (ValueError, SyntaxError):
-            continue
+    text = (result.content or "").strip()
+    match = re.search(r"```(?:json)?\s*(.*?)```", text, re.IGNORECASE | re.DOTALL)
+    if match:
+        text = match.group(1).strip()
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict) and isinstance(data.get("steps"), list):
+            return [str(s) for s in data["steps"]]
+    except json.JSONDecodeError:
+        pass
     return []
 
 
@@ -59,11 +76,10 @@ class Planner:
         self.llm_client = llm_client
 
     def plan(self, question: str) -> list[str]:
-        """根据用户问题生成行动计划；解析失败时返回空列表。"""
+        """根据用户问题生成行动计划；未收到有效工具调用时重试一次，仍失败返回空列表。"""
         print("--- 正在生成计划 ---")
 
         prompt = PLANNER_PROMPT_TEMPLATE.format(
-            current_date=datetime.now().strftime("%Y-%m-%d"),
             question=question,
             tool_descriptions="\n".join(
                 f"- **{name}**：{tool.DESCRIPTION}"
@@ -72,20 +88,36 @@ class Planner:
         )
         # 规划阶段是一次性提问，没有多轮对话，直接构造消息即可
         messages = [{"role": "system", "content": prompt}]
-        response_text = self.llm_client.chat_stream(messages) or ""
+        result = self.llm_client.chat_stream(messages, tools=_SUBMIT_PLAN_SCHEMA)
+        plan = _extract_plan(result)
 
-        plan = _parse_plan(response_text)
+        if not plan:
+            # 未收到有效计划：追加纠正提示，要求模型务必调用 submit_plan 工具
+            retry_prompt = prompt + (
+                "\n\n你刚才没有调用 submit_plan 工具。"
+                "请务必直接调用 submit_plan 工具，把步骤列表作为 steps 参数提交。"
+            )
+            print("❌ 未收到有效的计划工具调用，正在要求模型重试…")
+            result = self.llm_client.chat_stream(
+                [{"role": "system", "content": retry_prompt}],
+                tools=_SUBMIT_PLAN_SCHEMA,
+            )
+            plan = _extract_plan(result)
+
         if plan:
             print("✅ 计划已生成：")
             for i, step in enumerate(plan, start=1):
                 print(f"   {i}. {step}")
         else:
-            print(f"❌ 计划解析失败，原始响应：{response_text}")
+            print(f"❌ 计划解析失败，原始响应：{result.content}")
         return plan
 
 
 class Executor:
     """执行阶段：按计划逐步求解，把历史步骤和结果传给下一步。"""
+
+    # 单个步骤内最多允许的工具调用轮数（防止模型无限调用工具）
+    MAX_TOOL_ROUNDS = 3
 
     def __init__(self, llm_client: LLMClient):
         self.llm_client = llm_client
@@ -111,36 +143,65 @@ class Executor:
                 current_step=step,
                 tool_descriptions=tool_descriptions,
             )
+            # 单步内本地消息列表：允许同一步骤内多轮工具调用（错误可重试）
             messages = [{"role": "system", "content": prompt}]
 
-            response_text = self.llm_client.chat_stream(messages) or "（无输出）"
+            step_answer = ""
+            last_observation = ""
+            for _ in range(self.MAX_TOOL_ROUNDS):
+                result = self.llm_client.chat_stream(
+                    messages, tools=build_tool_schemas()
+                )
 
-            # Plan-and-Solve 里每一步都是一次求解，只有一种特例：
-            # 模型需要工具时输出 Action，工具返回的 Observation 即作为该步结果
-            parsed = parse_react_response(response_text)
-            if parsed["type"] == TYPE_ACTION:
-                print(f"🔧 调用工具：{parsed['tool']}，输入：{parsed['input']}")
-                observation = self._execute_tool(parsed["tool"], parsed["input"])
-                print(f"📋 工具返回：{observation}\n")
-                response_text = f"Observation: {observation}"
+                # 模型发起工具调用：执行并把结果以 tool 消息写回，继续同一步骤
+                if result.tool_calls:
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": result.content or "",
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.name,
+                                        "arguments": json.dumps(
+                                            tc.arguments, ensure_ascii=False
+                                        ),
+                                    },
+                                }
+                                for tc in result.tool_calls
+                            ],
+                        }
+                    )
+                    for tc in result.tool_calls:
+                        print(f"🔧 调用工具：{tc.name}，参数：{tc.arguments}")
+                        observation = call_tool(tc.name, tc.arguments)
+                        print(f"📋 工具返回：{observation}\n")
+                        last_observation = observation
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": observation,
+                            }
+                        )
+                    continue
 
-            history += f"步骤 {i}: {step}\n结果: {response_text}\n\n"
+                # 文本回复即该步答案
+                step_answer = result.content.strip() or "（无输出）"
+                break
+            else:
+                # 工具调用轮数耗尽：以最后一次工具返回作为该步结果
+                step_answer = last_observation or "（无输出）"
+
+            response_text = step_answer
+            history += f"步骤 {i}: {step}\n结果: {step_answer}\n\n"
 
             print(f"✅ 步骤 {i} 已完成")
 
         # 最后一步的答案即最终答案
         return response_text
-
-    def _execute_tool(self, tool_name: str, tool_input: str) -> str:
-        """按名称调用已注册工具模块；未知工具或异常时返回错误字符串。"""
-        if tool_name not in self.tools:
-            available = ", ".join(self.tools.keys())
-            return f"错误：工具 '{tool_name}' 不存在。可用工具：{available}"
-
-        try:
-            return self.tools[tool_name].run(tool_input)
-        except Exception as e:
-            return f"工具执行异常：{str(e)}"
 
 
 class PlanAndSolveAgent:

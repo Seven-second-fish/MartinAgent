@@ -22,6 +22,17 @@ DESCRIPTION = (
     "闲聊内容不需要调用。拿到结果后请直接整理回答，不要重复搜索。"
 )
 
+PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "query": {
+            "type": "string",
+            "description": "自然语言搜索查询，如 '阿莫西林的药品作用'",
+        }
+    },
+    "required": ["query"],
+}
+
 API_URL = "https://api.bocha.cn/v1/web-search"
 TIMEOUT = 10
 MAX_RESULTS = 3  # 最多格式化的结果条数
