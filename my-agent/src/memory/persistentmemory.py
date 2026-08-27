@@ -22,8 +22,8 @@ class PersistentMemory(ConversationMemory):
         self.save_path = save_path
         self._load()  # 启动时自动加载历史
 
-    def add_message(self, role: str, content: str):
-        super().add_message(role, content)
+    def add_message(self, role: str, content: str, **extra):
+        super().add_message(role, content, **extra)
         self._save()  # 每次添加消息后自动保存
 
     def clear(self):

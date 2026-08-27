@@ -4,7 +4,8 @@ Reflection Agent 实现（Reflexion 论文思想的简化版）。
 流程：
   1. 初始执行：按任务要求生成第一版代码
   2. 迭代循环（最多 max_iterations 轮）：
-     a. 反思：LLM 评审最新代码，给出改进反馈；若输出停止标记则结束
+     a. 反思：LLM 调用 submit_review 工具给出评审结论
+              （needs_improvement / feedback）；判定无需改进则结束
      b. 优化：按反馈生成新版本代码
   3. 返回最新一版代码
 
@@ -13,6 +14,7 @@ Reflection Agent 实现（Reflexion 论文思想的简化版）。
 
 from __future__ import annotations
 
+import json
 import re
 
 from src.core.llm_client import LLMClient
@@ -23,8 +25,48 @@ from src.core.prompts import (
 )
 from src.memory.trajectory import TrajectoryMemory
 
-# 反思阶段输出的「已无需再优化」停止标记（见 REFLECT_PROMPT_TEMPLATE 的停止约定）
-STOP_MARKER = "NO_IMPROVEMENT_NEEDED"
+# 「提交评审」工具：把「输出 JSON 评审」改成原生函数调用，
+# 让模型填参数表（needs_improvement / feedback）而不是自由写 JSON。
+_SUBMIT_REVIEW_SCHEMA = [
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_review",
+            "description": "提交代码评审结论",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "needs_improvement": {
+                        "type": "boolean",
+                        "description": "代码在算法层面是否仍有可改进之处",
+                    },
+                    "feedback": {
+                        "type": "string",
+                        "description": "改进建议；无需改进时为空字符串",
+                    },
+                },
+                "required": ["needs_improvement", "feedback"],
+            },
+        },
+    }
+]
+
+
+def _parse_review(result) -> dict | None:
+    """从 submit_review 工具调用取评审结论；未调用时退回解析正文 JSON。"""
+    for tc in result.tool_calls:
+        if tc.name == "submit_review":
+            args = tc.arguments
+            if isinstance(args, dict) and "needs_improvement" in args:
+                return args
+    text = (result.content or "").strip()
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        return None
+    return None
 
 
 def _strip_code_fences(text: str) -> str:
@@ -68,18 +110,29 @@ class ReflectionAgent:
         for i in range(self.max_iterations):
             print(f"\n--- 第 {i + 1}/{self.max_iterations} 轮迭代 ---")
 
-            # a. 反思
+            # a. 反思：调用 submit_review 工具提交评审结论
             print("\n-> 正在进行反思...")
             last_code = self.memory.get_last_execution() or ""
-            feedback = self._get_llm_response(
-                REFLECT_PROMPT_TEMPLATE.format(task=task, code=last_code),
-                strip_fences=False,
+            verdict = self._get_review(
+                REFLECT_PROMPT_TEMPLATE.format(task=task, code=last_code)
             )
+
+            # b. 检查是否需要停止
+            if verdict is None:
+                # 解析失败绝不停止：按「仍需改进」处理，保持迭代推进
+                feedback = "（未能收到有效的评审工具调用，按仍需改进处理）"
+                needs_improvement = True
+            else:
+                needs = verdict.get("needs_improvement", True)
+                # JSON 里模型可能把布尔写成字符串 "false"，Python 中为真值，需转换
+                if isinstance(needs, str):
+                    needs = needs.strip().lower() == "true"
+                needs_improvement = bool(needs)
+                feedback = str(verdict.get("feedback", "")).strip()
+
             self.memory.add_record("reflection", feedback)
 
-            # b. 检查是否需要停止：查显式标记，而不是自然语言子串
-            #    （「无需改进」作为从句出现在反馈里会导致误停，模板已约定停止标记）
-            if STOP_MARKER in feedback:
+            if not needs_improvement:
                 print("\n✅ 反思认为代码已无需改进，任务完成。")
                 break
 
@@ -107,8 +160,14 @@ class ReflectionAgent:
     def _get_llm_response(self, prompt: str, strip_fences: bool = True) -> str:
         """调用 LLM 获取完整流式响应；空响应时返回占位提示。"""
         messages = [{"role": "user", "content": prompt}]
-        response_text = self.llm_client.chat_stream(messages) or ""
+        response_text = self.llm_client.chat_stream(messages).content
         if not response_text.strip():
             print("⚠️  模型没有输出内容，本轮结果记为占位提示。")
             return "（模型未输出任何内容，请检查任务描述）"
         return _strip_code_fences(response_text) if strip_fences else response_text.strip()
+
+    def _get_review(self, prompt: str) -> dict | None:
+        """以 submit_review 函数调用方式获取评审结论；解析失败返回 None。"""
+        messages = [{"role": "user", "content": prompt}]
+        result = self.llm_client.chat_stream(messages, tools=_SUBMIT_REVIEW_SCHEMA)
+        return _parse_review(result)

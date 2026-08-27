@@ -15,6 +15,17 @@ DESCRIPTION = (
     "输入格式：'read:文件路径' 或 'write:文件路径:文件内容'"
 )
 
+PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "command": {
+            "type": "string",
+            "description": "'read:文件路径' 或 'write:文件路径:文件内容'",
+        }
+    },
+    "required": ["command"],
+}
+
 ALLOWED_DIR = "./workspace"
 
 

@@ -19,6 +19,17 @@ DESCRIPTION = (
     "示例：'https://example.com'"
 )
 
+PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "url": {
+            "type": "string",
+            "description": "完整 URL，需含 http:// 或 https://，如 'https://example.com'",
+        }
+    },
+    "required": ["url"],
+}
+
 TIMEOUT = 10
 MAX_CONTENT_LENGTH = 2000
 

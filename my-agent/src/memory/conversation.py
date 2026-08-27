@@ -17,32 +17,44 @@ class ConversationMemory:
         self.system_prompt = system_prompt
         self._history: list[dict] = []
 
-    def add_message(self, role: str, content: str):
+    def add_message(self, role: str, content: str, **extra):
         """
         添加一条消息到历史
-        
-        Args:
-            role: 角色，'user' / 'assistant' / 'system'
-            content: 消息内容
-        """
-        # 模型一轮说完（assistant）之后，下一轮要继续想，必须再塞进一条「非 assistant」的消息，否则就像让助手自己跟自己说话，协议也不自然。
-        self._history.append({"role": role, "content": content})
 
-        # 超出最大轮数时，裁剪最早的记录（保留 system 消息）
-        non_system = [m for m in self._history if m["role"] != "system"]
-        if len(non_system) > self.max_turns * 2:
-            # 删除最早的一轮（user + assistant 各一条）
-            for i, msg in enumerate(self._history):
-                if msg["role"] == "user":
-                    self._history.pop(i)
-                    if i < len(self._history) and self._history[i]["role"] == "assistant":
-                        self._history.pop(i)
-                    break
+        Args:
+            role: 角色，'user' / 'assistant' / 'tool' / 'system'
+            content: 消息内容
+            extra: 附加字段，透传进消息字典
+                   （如 assistant 的 tool_calls、tool 的 tool_call_id）
+        """
+        msg = {"role": role, "content": content}
+        msg.update(extra)
+        self._history.append(msg)
+        self._trim()
+
+    def _trim(self):
+        """
+        按「轮」裁剪历史：一轮 = 一条 user 起、到下一条 user 之前的所有消息。
+
+        保留最近 max_turns 个完整轮。tool 消息永远不会与它的
+        assistant(tool_calls) 拆散；旧的孤儿消息会挂在最早的轮里被一并裁掉。
+        """
+        turns: list[list[dict]] = []
+        current: list[dict] = []
+        for msg in self._history:
+            if msg.get("role") == "user" and current:
+                turns.append(current)
+                current = []
+            current.append(msg)
+        if current:
+            turns.append(current)
+        if len(turns) > self.max_turns:
+            self._history = [m for turn in turns[-self.max_turns:] for m in turn]
 
     def get_messages(self) -> list[dict]:
         """
         获取完整的消息列表（包含 system prompt）
-        
+
         Returns:
             适合直接传给 LLM 的消息列表
         """

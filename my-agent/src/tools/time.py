@@ -11,6 +11,8 @@ from datetime import datetime
 NAME = "get_time"
 DESCRIPTION = "获取当前的日期和时间，无需输入参数，直接调用即可"
 
+PARAMETERS = {"type": "object", "properties": {}}
+
 
 def run(_: str = "") -> str:
     """返回当前本地时间字符串。"""

@@ -17,6 +17,17 @@ DESCRIPTION = (
     "示例输入：'2 + 3 * 4'、'sqrt(16)'、'sin(3.14/2)'"
 )
 
+PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "expression": {
+            "type": "string",
+            "description": "数学表达式，如 '2 + 3 * 4'",
+        }
+    },
+    "required": ["expression"],
+}
+
 _SAFE_FUNCTIONS = {
     "abs": abs,
     "round": round,

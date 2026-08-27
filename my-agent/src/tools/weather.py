@@ -15,9 +15,20 @@ NAME = "get_weather"
 DESCRIPTION = (
     "查询天气。输入城市名称（中文或英文），返回简要天气信息。"
     "若用户未提及城市（例如「今天天气怎么样」），"
-    "Action Input 请填「当前」，将查询默认城市或按网络位置推断的当前城市。"
+    "输入请填「当前」，将查询默认城市或按网络位置推断的当前城市。"
     "示例：'北京'、'Shanghai'、'当前'"
 )
+
+PARAMETERS = {
+    "type": "object",
+    "properties": {
+        "city": {
+            "type": "string",
+            "description": "城市名称（中文或英文）；用户未提及城市时填「当前」",
+        }
+    },
+    "required": ["city"],
+}
 
 _CURRENT_ALIASES = {"", "当前", "本地", "当前位置", "current", "here", "local"}
 
