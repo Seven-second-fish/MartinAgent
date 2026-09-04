@@ -4,7 +4,7 @@ AI Agent 入口文件
 
 from typing import Protocol
 
-from src.core import ReActAgent, PlanAndSolveAgent, ReflectionAgent
+from src.core import ReActAgent, PlanAndSolveAgent, ReflectionAgent, AutoGenAgent
 
 
 class Agent(Protocol):
@@ -23,6 +23,8 @@ AGENTS = {
     "2": ("plan_and_solve", PlanAndSolveAgent),
     # Reflection: Execution 执行 -> Reflection 反思 -> Refinement 优化
     "3": ("reflection", ReflectionAgent),
+    # AutoGen：多角色共享历史轮流对话（ProductManager→Engineer→CodeReviewer→UserProxy）
+    "4": ("autogen", AutoGenAgent),
 }
 
 

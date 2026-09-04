@@ -7,5 +7,6 @@ core 包对外 API。
 from src.core.react_agent import ReActAgent
 from src.core.plan_solve_agent import PlanAndSolveAgent
 from src.core.reflection_agent import ReflectionAgent
+from src.core.autogen_agent import AutoGenAgent
 
-__all__ = ["ReActAgent", "PlanAndSolveAgent", "ReflectionAgent"]
+__all__ = ["ReActAgent", "PlanAndSolveAgent", "ReflectionAgent", "AutoGenAgent"]
