@@ -31,6 +31,7 @@ my-agent/logs/*
 my-agent/workspace/*
 !my-agent/workspace/.gitkeep
 *.log
+my-agent/generated/*
 
 # IDE / 系统
 .idea/
