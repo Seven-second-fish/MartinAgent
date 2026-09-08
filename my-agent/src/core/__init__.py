@@ -8,5 +8,6 @@ from src.core.react_agent import ReActAgent
 from src.core.plan_solve_agent import PlanAndSolveAgent
 from src.core.reflection_agent import ReflectionAgent
 from src.core.autogen_agent import AutoGenAgent
+from src.core.langgraph_agent import LangGraphAgent
 
-__all__ = ["ReActAgent", "PlanAndSolveAgent", "ReflectionAgent", "AutoGenAgent"]
+__all__ = ["ReActAgent", "PlanAndSolveAgent", "ReflectionAgent", "AutoGenAgent", "LangGraphAgent"]

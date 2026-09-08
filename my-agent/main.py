@@ -4,7 +4,7 @@ AI Agent 入口文件
 
 from typing import Protocol
 
-from src.core import ReActAgent, PlanAndSolveAgent, ReflectionAgent, AutoGenAgent
+from src.core import ReActAgent, PlanAndSolveAgent, ReflectionAgent, AutoGenAgent, LangGraphAgent
 
 
 class Agent(Protocol):
@@ -25,6 +25,10 @@ AGENTS = {
     "3": ("reflection", ReflectionAgent),
     # AutoGen：多角色共享历史轮流对话（ProductManager→Engineer→CodeReviewer→UserProxy）
     "4": ("autogen", AutoGenAgent),
+    # LangGraph: LangGraph 将智能体的执行流程建模为一种状态机（State Machine），
+    # 并将其表示为有向图（Directed Graph）。在这种范式中，图的节点（Nodes）代表一个具体的计算步骤（如调用 LLM、执行工具），
+    # 而边（Edges）则定义了从一个节点到另一个节点的跳转逻辑。
+    "5": ("langgraph", LangGraphAgent),
 }
 
 
