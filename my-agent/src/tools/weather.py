@@ -11,6 +11,8 @@ from urllib.parse import quote
 
 import requests
 
+from src.paths import ENV_FILE  # noqa: F401  # 导入即加载 my-agent/.env（见 src/paths.py）
+
 NAME = "get_weather"
 DESCRIPTION = (
     "查询天气。输入城市名称（中文或英文），返回简要天气信息。"

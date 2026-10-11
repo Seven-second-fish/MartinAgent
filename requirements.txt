@@ -1,4 +1,12 @@
+# 核心依赖（ReAct / Plan-and-Solve / Reflection / AutoGen 风格多角色）
 openai>=1.40.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 colorama>=0.4.6
+
+# 仅模式 5（langgraph）需要；不装也能跑其余四种模式
+langchain-core>=0.3.0
+langgraph>=0.2.0
+
+# 开发/测试
+pytest>=8.0.0

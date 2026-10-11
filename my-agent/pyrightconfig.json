@@ -1,7 +1,7 @@
 {
-  "include": ["src", "test", "main.py"],
+  "include": ["src", "tests", "main.py"],
   "extraPaths": ["."],
-  "venvPath": ".",
+  "venvPath": "..",
   "venv": "agent-env",
   "pythonVersion": "3.10"
 }

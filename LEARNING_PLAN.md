@@ -10,7 +10,7 @@
 
 当前仓库**已经具备**的能力（对照用，不必重做）：
 
-- 终端入口 + 三种 agent（ReAct / Plan-and-Solve / Reflection）
+- 终端入口 + 五种 agent（ReAct / Plan-and-Solve / Reflection / AutoGen 风格 / LangGraph）
 - OpenAI 兼容 LLM 调用（含流式）
 - 工具：计算、文件沙箱、网页、时间、天气
 - 对话记忆（内存 / 可选持久化）
@@ -98,7 +98,7 @@
 
 | 要做的功能 | 小提示 |
 |------------|--------|
-| 默认改用 `PersistentMemory`，验证重启后续聊 | 对照 `agent.py` 注释切换；看 `logs/memory.json` |
+| 默认改用 `PersistentMemory`，验证重启后续聊 | 对照 `react_agent.py` 注释切换；看 `my-agent/logs/memory.json` |
 | 限制历史长度：改 `max_turns`，观察长对话变化 | 搜：`上下文窗口 context window`（概念） |
 | 增加「只保留最近 N 轮 + 始终保留 system」的裁剪策略 | 读 `conversation.py` 现有裁剪再改 |
 | （进阶）对话摘要：超长时让模型总结旧历史再塞回 | 搜：`conversation summary memory` |

@@ -14,10 +14,9 @@ import json
 import os
 from dataclasses import dataclass, field
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+from src.paths import ENV_FILE  # noqa: F401  # 导入即加载 my-agent/.env（见 src/paths.py）
 
 
 @dataclass
@@ -40,8 +39,14 @@ class ChatResult:
 
 class LLMClient:
     def __init__(self):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                f"未读取到 OPENAI_API_KEY：请在 {ENV_FILE} 中配置"
+                "（可先复制 my-agent/.env.example 再填写），或用同名环境变量传入。"
+            )
         self.client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=api_key,
             base_url=os.getenv("OPENAI_BASE_URL"),
         )
         self.model = os.getenv("MODEL_NAME")

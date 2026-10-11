@@ -21,12 +21,13 @@ generated/<时间戳>/ 新文件夹（多文件各自成文件）。
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import datetime
+from pathlib import Path
 
 from colorama import Fore, Style, init
 
+from src.paths import GENERATED_DIR, ensure_runtime_dirs
 from src.core.llm_client import LLMClient
 from src.core.prompts import (
     PRODUCT_PROMPT,
@@ -40,9 +41,8 @@ init(autoreset=True)
 # 终止词：UserProxy 测试完成后回复它，对话即结束（AutoGen 的默认约定也是 TERMINATE）
 TERMINATE = "TERMINATE"
 
-# 代码保存目录：定位到 my-agent/generated（相对本文件向上三级），与运行目录无关
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUTPUT_DIR = os.path.join(_BASE_DIR, "generated")
+# 代码保存目录：统一由 src/paths.py 锚定到 my-agent/generated，与运行目录无关
+OUTPUT_DIR = str(GENERATED_DIR)
 
 # 只把 Engineer 说出的代码视为「交付物」（避免审查员复述代码导致重复保存）
 CODE_AUTHOR = "Engineer"
@@ -179,20 +179,18 @@ class AutoGenAgent:
             print(f"{Fore.YELLOW}⚠️  Engineer 未输出代码块，跳过保存。{Style.RESET_ALL}")
             return []
 
-        folder = os.path.join(OUTPUT_DIR, datetime.now().strftime("%Y%m%d_%H%M%S"))
-        os.makedirs(folder, exist_ok=True)
+        ensure_runtime_dirs()
+        folder = Path(OUTPUT_DIR) / datetime.now().strftime("%Y%m%d_%H%M%S")
+        folder.mkdir(parents=True, exist_ok=True)
 
         saved: list[str] = []
         for filename, lang, code in files:
             if not filename:
                 filename = _LANG_DEFAULT_FILE.get(lang) or f"code.{lang or 'txt'}"
-            path = os.path.join(folder, filename)
-            parent = os.path.dirname(path)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(code)
-            saved.append(path)
+            path = folder / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(code, encoding="utf-8")
+            saved.append(str(path))
             print(f"💾 已保存：{path}")
 
         if saved:

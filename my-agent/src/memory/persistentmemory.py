@@ -6,6 +6,7 @@
 import json
 import os
 
+from src.paths import MEMORY_FILE
 from src.memory.conversation import ConversationMemory
 
 # 继承于 ConversationMemory，实现持久化记忆
@@ -14,12 +15,12 @@ class PersistentMemory(ConversationMemory):
 
     def __init__(
         self,
-        save_path: str = "./logs/memory.json",
+        save_path: str | os.PathLike[str] = MEMORY_FILE,
         max_turns: int = 20,
         system_prompt: str = "",
     ):
         super().__init__(max_turns=max_turns, system_prompt=system_prompt)
-        self.save_path = save_path
+        self.save_path = str(save_path)
         self._load()  # 启动时自动加载历史
 
     def add_message(self, role: str, content: str, **extra):

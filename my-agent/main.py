@@ -5,6 +5,7 @@ AI Agent 入口文件
 from typing import Protocol
 
 from src.core import ReActAgent, PlanAndSolveAgent, ReflectionAgent, AutoGenAgent, LangGraphAgent
+from src.paths import ensure_runtime_dirs
 
 
 class Agent(Protocol):
@@ -74,7 +75,13 @@ def run_repl(agent: Agent) -> None:
 
 
 def main() -> None:
-    agent = select_agent()
+    ensure_runtime_dirs()  # 预建 logs/ workspace/ generated/
+    try:
+        agent = select_agent()
+    except RuntimeError as e:
+        # 典型情况：.env 未配置 API Key
+        print(f"\n⚠️ 启动失败：{e}")
+        return
     print("=" * 60)
     print("🤖 AI Agent 已启动！输入 'quit' 退出，'reset' 重置对话")
     print("=" * 60)

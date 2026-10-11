@@ -8,19 +8,20 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![API](https://img.shields.io/badge/API-OpenAI_Compatible-412991?logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](./VERSION)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](./VERSION)
 [![Purpose](https://img.shields.io/badge/Purpose-Learning_Only-F59E0B?logo=bookstack&logoColor=white)](#-注意)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#-贡献)
 
-[快速开始](#-快速开始) · [Agent 模式](#-三种-agent-模式) · [内置工具](#-内置工具) · [项目结构](#-项目结构) · [学习路线](#-学习路线)
+[快速开始](#-快速开始) · [Agent 模式](#-五种-agent-模式) · [内置工具](#-内置工具) · [项目结构](#-项目结构) · [学习路线](#-学习路线)
 
 </div>
 
 > [!IMPORTANT]
 > **学习声明**：本项目仅用于学习与研究目的。请勿使用 AI 对本项目进行修改或自动改动。
 
-MartinAgent 是一个跑在终端里的迷你 Agent 框架：不依赖 LangChain 等重型框架，
-一行一行实现 **工具调用、多轮规划、自我反思** 的完整闭环。
+MartinAgent 是一个跑在终端里的迷你 Agent 框架：前四种模式不依赖 LangChain / AutoGen 等重型框架，
+一行一行实现 **工具调用、多轮规划、自我反思、多角色协作** 的完整闭环；
+第五种模式（LangGraph）用状态机写法对照前面手写实现的差别。
 支持任意 **OpenAI 兼容 API**（OpenAI / DeepSeek / 智谱 GLM 等），
 工具调用与结构化输出统一走 **原生函数调用**（`tools` 字段），没有脆弱的正则解析层。
 
@@ -28,32 +29,37 @@ MartinAgent 是一个跑在终端里的迷你 Agent 框架：不依赖 LangChain
 
 ## ✨ 核心特性
 
-- 🔁 **三种经典 Agent 范式** —— ReAct、Plan-and-Solve、Reflection 一键切换，对照着学差别
+- 🔁 **五种 Agent 范式** —— ReAct、Plan-and-Solve、Reflection、AutoGen 风格多角色、LangGraph 状态机，一键切换对照着学
 - 🛠️ **原生函数调用** —— 工具调用与结构化输出都走 API 的 `tools` 字段，模型填参数表而不是自由写 JSON，从源头避免解析错误
 - 🌊 **流式输出** —— 思考过程逐字打印到终端，看得见 Agent 怎么想
 - 🧰 **开箱即用的 7 个工具** —— 计算、文件沙箱、网页抓取、网页搜索、时间、天气、掷骰子
-- 🧠 **双记忆实现** —— 进程内 `ConversationMemory` 或落盘 `PersistentMemory`（`logs/memory.json`），重启自动加载
+- 🧠 **双记忆实现** —— 进程内 `ConversationMemory` 或落盘 `PersistentMemory`（`my-agent/logs/memory.json`），重启自动加载
+- 📁 **路径不随 cwd 漂移** —— 运行时目录统一由 `src/paths.py` 锚定到 `my-agent/` 下
 - 🔌 **OpenAI 兼容** —— 改两个环境变量即可接入 DeepSeek / 智谱 / OpenAI 任一服务商
 - ➕ **加工具只要 3 步** —— 写一个模块、导出 4 个约定字段、注册进字典
+- ✅ **带 pytest 用例** —— 仓库根目录 `python -m pytest` 一把跑完
 
 ## 🧭 架构总览
 
 ```mermaid
 flowchart TB
     user(["👤 用户输入任务"]) --> repl["⌨️ main.py · REPL 任务循环<br/>reset 重置记忆 · quit 退出"]
-    repl --> mode{"选择模式"}
+    repl --> mode{"选择模式 1-5"}
 
     subgraph agents ["🤖 Agent 层"]
         direction LR
-        react["🔄 ReAct<br/>思考 → 行动 → 观察"]
-        ps["📋 Plan-and-Solve<br/>规划 → 逐步执行"]
-        refl["🔍 Reflection<br/>执行 → 反思 → 优化"]
+        react["1 ReAct<br/>思考 → 行动 → 观察"]
+        ps["2 Plan-and-Solve<br/>规划 → 逐步执行"]
+        refl["3 Reflection<br/>执行 → 反思 → 优化"]
+        ag["4 AutoGen 风格<br/>多角色轮流对话"]
+        lg["5 LangGraph<br/>状态机 / 有向图"]
     end
 
     subgraph core ["⚙️ 共享核心"]
         direction LR
+        paths["paths.py<br/>目录与 .env 锚定"]
         llm["LLMClient<br/>OpenAI 兼容 · 流式输出"]
-        mem["Memory<br/>Conversation / Persistent"]
+        mem["Memory<br/>Conversation / Persistent / Trajectory"]
     end
 
     subgraph tools ["🧰 工具层 · 原生函数调用（tools 字段）"]
@@ -67,19 +73,23 @@ flowchart TB
     mode --> agents
     agents -- 对话历史 --> llm
     agents --- mem
+    agents --- paths
     agents -- 结构化 tool_calls --> tools
     tools -- 观察结果写回记忆 --> agents
 ```
 
-## 🎭 三种 Agent 模式
+## 🎭 五种 Agent 模式
 
 | | 范式 | 一句话流程 | 适用场景 |
 |:---:|---|---|---|
 | `1` | 🔄 **ReAct** | Thought → Action → Observation，边想边做循环迭代 | 需要多轮调用工具的即时问答类任务 |
 | `2` | 📋 **Plan-and-Solve** | Planner 先拆解为有序步骤 → Executor 按步执行 | 步骤清晰、可预先规划的多步任务 |
 | `3` | 🔍 **Reflection** | 先产出初稿 → 自我评审（submit_review）→ 按反馈迭代优化 | 代码等需要质量打磨的生成类任务 |
+| `4` | 👥 **AutoGen 风格** | 四个角色（产品/工程/评审/用户）共享历史轮流发言，出现 `TERMINATE` 结束 | 需要多视角协作、边写边审的生成任务 |
+| `5` | 🕸️ **LangGraph** | 把执行流程建模为状态机（节点=计算步骤，边=跳转逻辑） | 想对照「框架写法 vs 手写写法」的差异 |
 
 > 💡 Planner 提交计划走 `submit_plan`、Reflection 提交评审走 `submit_review` —— 都是用函数调用承载的结构化输出，让模型「填参数」而不是「编 JSON」。
+> 🔧 模式 5 需要额外依赖：`pip install langchain-core langgraph`。
 
 ## 🚀 快速开始
 
@@ -95,8 +105,11 @@ python3 -m venv .venv
 source .venv/bin/activate       # Linux / macOS
 # .venv\Scripts\activate        # Windows
 
-# 安装核心依赖
+# 安装核心依赖（模式 1-4 够用）
 pip install -r requirements.txt
+
+# 可选：模式 5（LangGraph）
+pip install langchain-core langgraph
 
 # 验证安装
 python -c "import openai; print('OpenAI SDK 安装成功')"
@@ -142,7 +155,8 @@ cd my-agent
 python main.py
 ```
 
-启动后先选模式（`1` ReAct / `2` Plan-and-Solve / `3` Reflection），然后按轮输出思考过程（流式），最多 8 轮工具迭代。
+启动后先选模式（`1` ReAct / `2` Plan-and-Solve / `3` Reflection / `4` AutoGen 风格 / `5` LangGraph），
+然后按轮输出思考过程（流式），ReAct 最多 8 轮工具迭代。
 
 ## ⚙️ 环境变量
 
@@ -161,7 +175,7 @@ python main.py
 | 输入 | 行为 |
 |:---|---|
 | 任务描述 | 开始执行任务 |
-| `reset` | 清空对话记忆（若启用持久化，同步清空 `logs/memory.json`） |
+| `reset` | 清空对话记忆（若启用持久化，同步清空 `my-agent/logs/memory.json`） |
 | `quit` | 退出（也可 `Ctrl+C` 中断当前任务继续输入） |
 
 试着丢给 Agent 这几类任务：
@@ -198,25 +212,43 @@ python main.py
 
 ```text
 MartinAgent/
+├── pytest.ini                # pytest 配置（testpaths / pythonpath）
 ├── requirements.txt          # 依赖声明
-├── AGENT.md                  # 给 AI / 开发者的仓库约定
+├── AGENT.md / CLAUDE.md      # 给 AI / 开发者的仓库约定（内容一致）
 ├── LEARNING_PLAN.md          # 分阶段学习计划
 ├── VERSION
 └── my-agent/
     ├── main.py               # 入口：模式选择 + REPL
     ├── .env.example          # 环境变量模板
-    ├── workspace/            # 📂 文件沙箱（file_tool 唯一可写目录）
-    ├── logs/                 # 运行时记忆（启用持久化时写入 memory.json）
+    ├── pyrightconfig.json
+    ├── workspace/            # 📂 文件沙箱（file_tool 唯一可读写目录，内容不入库）
+    ├── generated/            # 🏗️ 模式 4 生成的代码（内容不入库）
+    ├── logs/                 # 🧠 运行时记忆（启用持久化时写入 memory.json，内容不入库）
+    ├── tests/                # ✅ pytest 用例（conftest.py + test_*.py）
     └── src/
+        ├── paths.py          # 🧭 目录与 .env 统一锚定（不依赖启动目录）
         ├── core/             # 🤖 Agent 与 LLM 客户端
-        │   ├── react_agent.py         # ReAct 主循环
-        │   ├── plan_solve_agent.py    # Planner + Executor
-        │   ├── reflection_agent.py    # 执行 → 反思 → 优化
+        │   ├── react_agent.py         # 模式 1：ReAct 主循环
+        │   ├── plan_solve_agent.py    # 模式 2：Planner + Executor
+        │   ├── reflection_agent.py    # 模式 3：执行 → 反思 → 优化
+        │   ├── autogen_agent.py       # 模式 4：多角色轮流对话（手写）
+        │   ├── langgraph_agent.py     # 模式 5：LangGraph 状态机（需额外依赖）
         │   ├── llm_client.py          # OpenAI 兼容 · 流式 + 工具组装
         │   └── prompts.py             # 各角色提示词
         ├── tools/            # 🧰 无状态工具模块（见上表）
-        └── memory/           # 🧠 ConversationMemory / PersistentMemory
+        └── memory/           # 🧠 ConversationMemory / PersistentMemory / TrajectoryMemory
 ```
+
+## ✅ 测试
+
+在仓库根目录运行（`pytest.ini` 已配好 `pythonpath`，无需手动设置 `sys.path`）：
+
+```bash
+python -m pytest           # 全部
+python -m pytest -v        # 看用例名
+```
+
+覆盖：工具 schema 与调用协议、记忆按轮裁剪、`file_tool` 沙箱边界、流式工具调用组装（mock SDK，不发真实请求）。
 
 ## 🗺️ 学习路线
 
@@ -229,19 +261,27 @@ MartinAgent/
 - [**Plan-and-Solve** Prompting: Improving Zero-Shot Chain-of-Thought Reasoning](https://arxiv.org/abs/2305.04091)
 - [**Reflexion**: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366)
 
+多智能体与图编排的参考实现：
+
+- [**AutoGen**: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155)（对应模式 4 的手写版）
+- [**LangGraph** 文档](https://langchain-ai.github.io/langgraph/)（对应模式 5）
+
 ## ⚠️ 注意
 
 - 需要 **Python 3.10+** 和可用的大模型 API Key
-- 依赖很轻：`openai` · `python-dotenv` · `requests` · `colorama`
-- 🔒 安全边界：不要提交真实密钥；`file_tool` 只能操作 `workspace/`；`web_tool` 只放行 http/https
-- ❌ 刻意不引入 LangChain 等重型 Agent 框架 —— 读懂每一行是本项目的目的
+- 核心依赖很轻：`openai` · `python-dotenv` · `requests` · `colorama`（测试另需 `pytest`）
+- 🔒 安全边界：不要提交真实密钥；`file_tool` 只能操作 `my-agent/workspace/`；`web_tool` 只放行 http/https
+- 📁 产物落点固定：`my-agent/logs/`（记忆）、`my-agent/workspace/`（沙箱）、`my-agent/generated/`（模式 4 生成的代码），三者内容都不进版本库
+- ❌ 模式 1-4 刻意不引入 LangChain / AutoGen 等重型框架 —— 读懂每一行是本项目的目的；
+  模式 5（LangGraph）是唯一的例外，用来对照「框架写法 vs 手写写法」
 
 ## 🤝 贡献
 
 欢迎 Issue 和 PR！为了保持「纯手工学习项目」的定位：
 
-- 请遵循 [AGENT.md](AGENT.md) 中的架构与代码风格约定（有状态用类、无状态用函数）
-- 新增第三方依赖时同步更新根目录 `requirements.txt`
+- 请遵循 [AGENT.md](AGENT.md)（与 [CLAUDE.md](CLAUDE.md) 内容一致）中的架构与代码风格约定（有状态用类、无状态用函数）
+- 新增第三方依赖时同步更新根目录 `requirements.txt`；改动行为后跑一遍 `python -m pytest`
+- 新增运行时产物目录时，在 `src/paths.py` 里登记并补 `.gitignore` 规则，不要写依赖 cwd 的相对路径
 - 请不要使用 AI 批量改写本仓库代码 —— 动手写才是学习的意义 🙂
 
 ## 📄 许可证

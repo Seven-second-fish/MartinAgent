@@ -10,9 +10,8 @@ import os
 import re
 
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
+from src.paths import ENV_FILE  # noqa: F401  # 导入即加载 my-agent/.env（见 src/paths.py）
 
 NAME = "websearch_tool"
 DESCRIPTION = (
