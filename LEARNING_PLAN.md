@@ -28,10 +28,10 @@
 | 要做的事 | 小提示 |
 |----------|--------|
 | 创建/激活 Python 虚拟环境 | 搜：`python venv 是什么`、`source activate` |
-| 用 pip 安装 `requirements.txt` | 搜：`pip install -r` |
+| 用 pip 安装依赖（`pip install -e ".[dev,langgraph]"`） | 搜：`pip install -e 可编辑安装` |
 | 配置 `.env` 里的 API Key | 搜：`dotenv 环境变量`；密钥不要提交 Git |
-| 运行 `python main.py`，试 3 个示例任务 | 看终端里有没有 `Action` / 工具返回 |
-| 会用 `reset` / `quit` | 对照 `main.py` 里的分支 |
+| 运行 `martin-agent`（或 `python -m martin_agent.main`），试 3 个示例任务 | 看终端里有没有工具调用与返回结果 |
+| 会用 `reset` / `quit` | 对照 `martin_agent/main.py` 里的分支 |
 
 **过关**：不靠别人口述，你能从「打开终端」到「算出一道题 + 查一次天气」。
 
@@ -39,13 +39,13 @@
 
 ## 阶段 1：Python 最小集（只服务本项目）
 
-**目标**：能读懂 `my-agent/src` 里的代码在干什么（不要求一次学会全部 Python）。
+**目标**：能读懂 `martin_agent/` 里的代码在干什么（不要求一次学会全部 Python）。
 
 按文件读，边读边搜；每项只需会「本项目用到的那一点」。
 
 | 要搞懂的点 | 对照本仓库 | 小提示（搜什么） |
 |------------|------------|------------------|
-| 脚本入口、`import`、包路径 | `main.py`、`from src.xxx` | `python 模块 import`、`__init__.py` |
+| 脚本入口、`import`、包路径 | `martin_agent/main.py`、`from martin_agent.xxx` | `python 模块 import`、`__init__.py` |
 | 函数 / 返回值 / 字符串 | 各 `tools/*.py` 的 `run()` | `python def`、`f-string` |
 | 字典、列表 | `agent` 里 `tools`、记忆里的 messages | `python dict list` |
 | 类：何时有状态 | `ReActAgent`、`LLMClient`、Memory | `python class self`；对比工具为何不用类 |
@@ -54,7 +54,7 @@
 | HTTP 请求 | `web_tool`、`weather` | `python requests get` |
 | 环境变量 | `llm_client`、天气默认城市 | `os.getenv`、`python-dotenv` |
 
-**过关**：能指着 `agent.py` 的 `run()` 讲清楚：一轮里先干什么、后干什么。
+**过关**：能指着 `react_agent.py` 的 `run()` 讲清楚：一轮里先干什么、后干什么。
 
 ---
 
@@ -98,7 +98,7 @@
 
 | 要做的功能 | 小提示 |
 |------------|--------|
-| 默认改用 `PersistentMemory`，验证重启后续聊 | 对照 `react_agent.py` 注释切换；看 `my-agent/logs/memory.json` |
+| 默认改用 `PersistentMemory`，验证重启后续聊 | 对照 `react_agent.py` 注释切换；看 `logs/memory.json` |
 | 限制历史长度：改 `max_turns`，观察长对话变化 | 搜：`上下文窗口 context window`（概念） |
 | 增加「只保留最近 N 轮 + 始终保留 system」的裁剪策略 | 读 `conversation.py` 现有裁剪再改 |
 | （进阶）对话摘要：超长时让模型总结旧历史再塞回 | 搜：`conversation summary memory` |
@@ -198,4 +198,4 @@ Linux 命令不熟时：先 `pwd` / `ls` / `cd` 定位，再搜具体命令；�
 | `AGENT.md` | 改代码时的约定（类 vs 模块、怎么加工具） |
 | 本文 `LEARNING_PLAN.md` | 你学 Agent 时「下一步做什么功能」 |
 
-读代码顺序建议：`main.py` → `react_agent.py` → `llm_client.py`（重点看流式 tool_calls 组装）→ 某一个 `tools/*.py` → `memory/*`。
+读代码顺序建议：`martin_agent/main.py` → `core/react_agent.py` → `core/llm_client.py`（重点看流式 tool_calls 组装）→ 某一个 `tools/*.py` → `memory/*`。

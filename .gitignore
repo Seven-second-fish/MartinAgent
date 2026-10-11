@@ -1,12 +1,12 @@
 # ===== 虚拟环境 =====
-agent-env/
 .venv/
 venv/
 env/
 
 # ===== 环境变量与密钥 =====
-.env
-.env.local
+# 通配兜底：.env.local / .env.dev / .env.bak 等一律不入库，仅放行模板
+.env*
+!.env.example
 *.pem
 
 # ===== Python 缓存与构建产物 =====
@@ -23,26 +23,26 @@ build/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
 
 # ===== 运行时数据（不入版本库，只保留 .gitkeep 占位）=====
 # logs：PersistentMemory 的 memory.json 等
-my-agent/logs/**
-!my-agent/logs/**/.gitkeep
-!my-agent/logs/.gitkeep
+logs/**
+!logs/**/.gitkeep
+!logs/.gitkeep
 
 # workspace：file_tool 的读写沙箱
-my-agent/workspace/**
-!my-agent/workspace/**/.gitkeep
-!my-agent/workspace/.gitkeep
+workspace/**
+!workspace/**/.gitkeep
+!workspace/.gitkeep
 
 # generated：autogen 模式生成的代码
-my-agent/generated/**
-!my-agent/generated/**/.gitkeep
-!my-agent/generated/.gitkeep
+generated/**
+!generated/**/.gitkeep
+!generated/.gitkeep
 
-# 兜底：误在仓库根目录启动时，不再把 logs/ 提交上去
-/logs/
 *.log
 
 # ===== IDE / 系统 =====

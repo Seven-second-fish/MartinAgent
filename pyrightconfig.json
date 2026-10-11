@@ -1,0 +1,7 @@
+{
+  "include": ["martin_agent", "tests"],
+  "extraPaths": ["."],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.10"
+}

@@ -1,0 +1,18 @@
+# ===== 换行符与文本规范化 =====
+# 默认：仓库内存 LF，Windows 检出也保持 LF
+# （消除 git 的 "LF will be replaced by CRLF" 警告）
+* text=auto eol=lf
+
+# Windows 专用脚本必须 CRLF，否则 cmd 可能解析异常
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制：禁止换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.xlsx binary

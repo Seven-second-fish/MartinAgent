@@ -1,7 +1,0 @@
-openai>=1.40.0
-python-dotenv>=1.0.0
-requests>=2.31.0
-colorama>=0.4.6
-langchain-core>=0.3.0
-langgraph>=0.2.0
-pytest>=8.0.0
