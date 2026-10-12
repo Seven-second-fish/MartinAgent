@@ -36,7 +36,7 @@ MartinAgent/
 ├── .editorconfig             # 跨编辑器统一缩进/换行
 ├── VERSION                   # 版本号，被 pyproject.toml 动态读取
 ├── AGENT.md / CLAUDE.md      # 仓库约定（两份内容一致）
-├── README.md / LEARNING_PLAN.md
+├── README.md
 ├── .github/workflows/ci.yml  # CI：Ubuntu + Windows × Python 3.10/3.12/3.13 跑测试
 ├── martin_agent/             # 📦 包根（import martin_agent）
 │   ├── main.py               # 入口：模式选择 + REPL

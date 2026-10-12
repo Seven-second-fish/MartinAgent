@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 变更
+
+- README 定位改为中性表述：去掉 `Purpose-Learning_Only` 徽章与「仅用于学习与研究目的」
+  的声明（改为个人项目说明 + 欢迎交流），致谢与贡献章节同步去掉「学习项目」措辞
+- README「学习路线」章节改为「参考与延伸阅读」，只保留论文与参考实现
+
+### 移除
+
+- `LEARNING_PLAN.md`（分阶段学习计划）：内容面向个人学习路线，不属于框架自身的说明；
+  `AGENT.md` / `CLAUDE.md` 的目录树同步去掉该文件
+
 ### 计划中
 
 - 为网络类工具（`web_tool` / `websearch_tool` / `get_weather`）补 mock 测试

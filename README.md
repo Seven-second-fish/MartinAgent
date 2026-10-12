@@ -11,15 +11,15 @@
 [![API](https://img.shields.io/badge/API-OpenAI_Compatible-412991?logo=openai&logoColor=white)](https://platform.openai.com/docs/api-reference)
 [![Version](https://img.shields.io/badge/version-0.2.0-blue)](./VERSION)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
-[![Purpose](https://img.shields.io/badge/Purpose-Learning_Only-F59E0B?logo=bookstack&logoColor=white)](#-注意)
+[![Purpose](https://img.shields.io/badge/Purpose-Portfolio_Project-4B5563?logo=bookstack&logoColor=white)](#-注意)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#-贡献)
 
-[快速开始](#-快速开始) · [Agent 模式](#-五种-agent-模式) · [内置工具](#-内置工具) · [项目结构](#-项目结构) · [测试](#-测试) · [学习路线](#-学习路线)
+[快速开始](#-快速开始) · [Agent 模式](#-五种-agent-模式) · [内置工具](#-内置工具) · [项目结构](#-项目结构) · [测试](#-测试) · [参考与延伸阅读](#-参考与延伸阅读)
 
 </div>
 
-> [!IMPORTANT]
-> **学习声明**：本项目仅用于学习与研究目的。请勿使用 AI 对本项目进行修改或自动改动。
+> [!NOTE]
+> 这是一个个人项目，欢迎通过 Issue / PR 交流与指正。使用前请先阅读下方[注意事项](#-注意)。
 
 MartinAgent 是一个跑在终端里的迷你 Agent 框架：前四种模式不依赖 LangChain / AutoGen 等重型框架，
 一行一行实现 **工具调用、多轮规划、自我反思、多角色协作** 的完整闭环；
@@ -229,7 +229,6 @@ MartinAgent/
 ├── .gitattributes            # 换行符规范化
 ├── .editorconfig             # 跨编辑器统一缩进/换行
 ├── AGENT.md / CLAUDE.md      # 给 AI / 开发者的仓库约定（内容一致）
-├── LEARNING_PLAN.md          # 分阶段学习计划
 ├── VERSION                   # 版本号（被 pyproject.toml 读取）
 ├── .github/workflows/ci.yml  # CI：自动跑测试（Ubuntu + Windows）
 ├── martin_agent/             # 📦 包根：import martin_agent
@@ -273,12 +272,9 @@ python -m pytest -v --no-cov    # 只看用例名
 
 推送或提 PR 时 CI 会在 Ubuntu + Windows × Python 3.10/3.12/3.13 上自动跑一遍。
 
-## 🗺️ 学习路线
+## 📚 参考与延伸阅读
 
-本项目是一个「边造边学」的学习仓库，推荐顺序：**能跑通 → 读懂 → 小改 → 新功能 → 加深 Agent 能力**。
-每个阶段要做什么、过关标准是什么，见 [`LEARNING_PLAN.md`](LEARNING_PLAN.md)。
-
-涉及的经典论文思想：
+五种范式对应的经典论文：
 
 - [**ReAct**: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629)
 - [**Plan-and-Solve** Prompting: Improving Zero-Shot Chain-of-Thought Reasoning](https://arxiv.org/abs/2305.04091)
@@ -295,17 +291,16 @@ python -m pytest -v --no-cov    # 只看用例名
 - 核心依赖很轻：`openai` · `python-dotenv` · `requests` · `colorama`（测试另需 `pytest` + `pytest-cov`）
 - 🔒 安全边界：不要提交真实密钥；`file_tool` 只能操作 `workspace/`；`web_tool` 只放行 http/https
 - 📁 产物落点固定：`logs/`（记忆）、`workspace/`（沙箱）、`generated/`（模式 4 生成的代码），三者内容都不进版本库
-- ❌ 模式 1-4 刻意不引入 LangChain / AutoGen 等重型框架 —— 读懂每一行是本项目的目的；
+- ❌ 模式 1-4 刻意不引入 LangChain / AutoGen 等重型框架 —— 核心实现保持可读、可控；
   模式 5（LangGraph）是唯一的例外，用来对照「框架写法 vs 手写写法」
 
 ## 🤝 贡献
 
-欢迎 Issue 和 PR！为了保持「纯手工学习项目」的定位：
+欢迎 Issue 和 PR！为了保持「核心依赖克制、协议手写」的定位：
 
 - 请遵循 [AGENT.md](AGENT.md)（与 [CLAUDE.md](CLAUDE.md) 内容一致）中的架构与代码风格约定（有状态用类、无状态用函数）
 - 新增第三方依赖时改 `pyproject.toml`（唯一来源）；改动行为后跑一遍 `python -m pytest`
 - 新增运行时产物目录时，在 `martin_agent/paths.py` 里登记并补 `.gitignore` 规则，不要写依赖 cwd 的相对路径
-- 请不要使用 AI 批量改写本仓库代码 —— 动手写才是学习的意义 🙂
 
 ## 📄 许可证
 
@@ -313,8 +308,8 @@ python -m pytest -v --no-cov    # 只看用例名
 
 <div align="center">
 
-**如果这个项目对你的 Agent 学习之路有帮助，欢迎点个 Star ⭐**
+**如果这个项目对你有帮助，欢迎点个 Star ⭐**
 
-Made with ❤️ by hand · Powered by any OpenAI-compatible LLM
+Made with ❤️ · Powered by any OpenAI-compatible LLM
 
 </div>
