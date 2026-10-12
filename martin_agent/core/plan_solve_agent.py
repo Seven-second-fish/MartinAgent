@@ -143,8 +143,10 @@ class Executor:
                 current_step=step,
                 tool_descriptions=tool_descriptions,
             )
-            # 单步内本地消息列表：允许同一步骤内多轮工具调用（错误可重试）
-            messages = [{"role": "system", "content": prompt}]
+            # 单步内本地消息列表：允许同一步骤内多轮工具调用（错误可重试）。
+            # 显式标注 list[dict]：列表里既有纯文本消息，也有带 tool_calls 的
+            # assistant 消息，结构不同，不能按首元素推断成统一的具体类型。
+            messages: list[dict] = [{"role": "system", "content": prompt}]
 
             step_answer = ""
             last_observation = ""

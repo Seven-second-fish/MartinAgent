@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **可选依赖真正解耦**：`martin_agent/core/__init__.py` 改用 PEP 562 模块级 `__getattr__`
+  惰性导入 `LangGraphAgent`。此前它是顶层 `import`，导致**未安装 `langgraph` 时**
+  `python -m martin_agent.main` 与 `pytest` 会在导入阶段直接 `ModuleNotFoundError`，
+  与「模式 5 不装也能跑其余四种模式」的声明不符
+- `main.py` 模式注册表改为存类名、实例化时才从 `core` 解析；选中模式 5 而依赖缺失时
+  打印安装提示并回到模式选择，不再抛出调用栈
+- `tests/test_agents.py`：模式 5 的用例改为缺失可选依赖时 `skip`，
+  不再让整个测试会话在收集阶段失败
+
 ### 变更
 
 - README 定位改为中性表述：去掉 `Purpose-Learning_Only` 徽章与「仅用于学习与研究目的」

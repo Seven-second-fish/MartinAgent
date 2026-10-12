@@ -6,6 +6,7 @@
   3. PlanAndSolveAgent：规划 → 逐步执行，返回最后一步答案
   4. ReflectionAgent：执行 → 反思 → 优化，直到 needs_improvement=false 收敛
   5. AutoGenAgent：多角色共享历史轮流发言，遇 TERMINATE 结束
+  6. LangGraphAgent：reset() 换会话 —— 需可选依赖，未安装时跳过本用例
 
 LLMClient 构造时会读 OPENAI_API_KEY，这里在导入前塞占位值；
 所有用例都把 agent 的 llm_client 换成 FakeLLMClient，不会发出任何真实请求。
@@ -13,16 +14,24 @@ LLMClient 构造时会读 OPENAI_API_KEY，这里在导入前塞占位值；
 
 from __future__ import annotations
 
+import importlib.util
 import os
+
+import pytest
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from martin_agent.core.autogen_agent import AutoGenAgent  # noqa: E402
-from martin_agent.core.langgraph_agent import LangGraphAgent  # noqa: E402
 from martin_agent.core.llm_client import ChatResult, ToolCall  # noqa: E402
 from martin_agent.core.plan_solve_agent import PlanAndSolveAgent, Planner  # noqa: E402
 from martin_agent.core.react_agent import ReActAgent  # noqa: E402
 from martin_agent.core.reflection_agent import ReflectionAgent  # noqa: E402
+
+# 模式 5 依赖可选框架：只装核心依赖时应跳过它自己的用例，
+# 而不是让整个测试会话在收集阶段就失败。
+_LANGGRAPH_INSTALLED = all(
+    importlib.util.find_spec(mod) is not None for mod in ("langchain_core", "langgraph")
+)
 
 
 class FakeLLMClient:
@@ -173,8 +182,15 @@ def test_autogen_pipeline_stops_at_terminate(tmp_path, monkeypatch):
     ]
 
 
+@pytest.mark.skipif(
+    not _LANGGRAPH_INSTALLED,
+    reason='模式 5 需要可选依赖，安装：pip install -e ".[langgraph]"',
+)
 def test_langgraph_agent_reset_swaps_thread():
     """LangGraph 模式 reset() 后会话换新（不测完整流程图，避免耦合图实现细节）。"""
+    # 可选依赖装了才导入，避免未安装时污染整个模块的收集
+    from martin_agent.core.langgraph_agent import LangGraphAgent
+
     agent = LangGraphAgent()
     first = agent._thread_id
     agent.reset()

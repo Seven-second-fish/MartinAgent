@@ -32,6 +32,13 @@ from martin_agent.tools import call_tool
 load_dotenv()
 
 
+class SearchInput(TypedDict):
+    # 每轮 invoke 的输入只含一条用户消息；其余字段由节点在运行中产生。
+    # 单独定义输入 schema，partial dict 才是合法类型（否则类型检查器
+    # 会按 SearchState 要求一次凑齐全部字段）。
+    messages: Annotated[list, add_messages]
+
+
 class SearchState(TypedDict):
     # 跨轮次共享的历史消息；带 reducer 注解，节点返回时追加而非覆盖
     messages: Annotated[list, add_messages]
@@ -67,7 +74,7 @@ class LangGraphAgent:
         注意：add_node/add_edge/compile 只做登记与结构校验，节点函数要到
         app.invoke(...) 那一刻才会真正执行。
         """
-        workflow = StateGraph(SearchState)
+        workflow = StateGraph(SearchState, input_schema=SearchInput)
 
         workflow.add_node("understand", self._understand_node)
         workflow.add_node("search", self._search_node)

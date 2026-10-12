@@ -105,6 +105,11 @@ python -m pytest -v --no-cov         # 只看用例名、跳过覆盖率
 依赖：核心是 `openai`、`python-dotenv`、`requests`、`colorama`；
 测试需 `pytest` + `pytest-cov`；模式 5 额外需要 `langchain-core`、`langgraph`。
 
+**可选依赖的隔离约束（改动前务必确认）**：未安装模式 5 的可选依赖时，
+其余四种模式与 `pytest` 都应正常工作——`core/__init__.py` 用 PEP 562 模块级
+`__getattr__` 惰性导入 `LangGraphAgent`，`tests/test_agents.py` 对模式 5 用例做
+`skip`。不要让模式 5 的框架依赖扩散到导入链或测试收集阶段。
+
 **依赖的三层分工（重要，别搞混）**：
 
 | 文件 | 角色 | 谁维护 |
